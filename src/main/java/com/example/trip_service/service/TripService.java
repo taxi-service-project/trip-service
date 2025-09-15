@@ -2,6 +2,9 @@ package com.example.trip_service.service;
 
 import com.example.trip_service.client.NaverMapsClient;
 import com.example.trip_service.entity.Trip;
+import com.example.trip_service.exception.TripNotFoundException;
+import com.example.trip_service.kafka.TripKafkaProducer;
+import com.example.trip_service.kafka.dto.DriverArrivedEvent;
 import com.example.trip_service.kafka.dto.PaymentCompletedEvent;
 import com.example.trip_service.kafka.dto.TripMatchedEvent;
 import com.example.trip_service.repository.TripRepository;
@@ -19,6 +22,7 @@ public class TripService {
 
     private final TripRepository tripRepository;
     private final NaverMapsClient naverMapsClient;
+    private final TripKafkaProducer kafkaProducer;
 
     public Mono<Trip> createTripFromEvent(TripMatchedEvent event) {
         log.info("배차 완료 이벤트 수신. Trip ID: {}, User ID: {}, Driver ID: {}",
@@ -60,5 +64,19 @@ public class TripService {
                     log.error("결제 완료 이벤트를 처리할 여정을 찾지 못했습니다. Trip ID: {}", event.tripId());
                 }
         );
+    }
+
+    public void driverArrived(String tripId) {
+        log.info("기사 도착 처리 시작. Trip ID: {}", tripId);
+
+        Trip trip = tripRepository.findByTripId(tripId)
+                                  .orElseThrow(() -> new TripNotFoundException("해당 tripId의 여정을 찾을 수 없습니다: " + tripId));
+
+        trip.arrive();
+
+        DriverArrivedEvent event = new DriverArrivedEvent(trip.getTripId(), trip.getUserId());
+        kafkaProducer.sendDriverArrivedEvent(event);
+
+        log.info("기사 도착 처리 완료. Trip DB ID: {}", trip.getId());
     }
 }

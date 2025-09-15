@@ -1,5 +1,6 @@
 package com.example.trip_service.entity;
 
+import com.example.trip_service.exception.TripStatusConflictException;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -61,4 +62,12 @@ public class Trip {
     public void updateFare(Integer fare) {
         this.fare = fare;
     }
+
+    public void arrive() {
+        if (this.status != TripStatus.MATCHED) {
+            throw new TripStatusConflictException("기사가 이미 도착했거나 운행 중인 여정입니다. 현재 상태: " + this.status);
+        }
+        this.status = TripStatus.ARRIVED;
+    }
+
 }
