@@ -20,4 +20,10 @@ public class TripController {
         tripService.driverArrived(tripId);
         return ResponseEntity.noContent().build();
     }
+
+    @PutMapping("/{tripId}/start")
+    public ResponseEntity<Void> startTrip(@PathVariable String tripId) {
+        tripService.startTrip(tripId);
+        return ResponseEntity.noContent().build();
+    }
 }

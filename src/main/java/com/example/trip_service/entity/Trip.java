@@ -70,4 +70,12 @@ public class Trip {
         this.status = TripStatus.ARRIVED;
     }
 
+    public void start() {
+        if (this.status != TripStatus.ARRIVED) {
+            throw new TripStatusConflictException("운행을 시작할 수 없는 상태입니다. 현재 상태: " + this.status);
+        }
+        this.status = TripStatus.IN_PROGRESS;
+        this.startedAt = LocalDateTime.now();
+    }
+
 }

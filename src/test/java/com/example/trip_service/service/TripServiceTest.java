@@ -16,12 +16,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -90,6 +88,40 @@ class TripServiceTest {
         // when & then: 예외 발생 검증
         assertThrows(TripNotFoundException.class, () -> {
             tripService.driverArrived(tripId);
+        });
+    }
+
+    @Test
+    @DisplayName("운행 시작 처리 성공: 상태가 ARRIVED에서 IN_PROGRESS로 변경되고 시작 시간이 기록된다")
+    void startTrip_Success() {
+        // given
+        String tripId = "test-trip-id";
+        Trip arrivedTrip = Trip.builder().tripId(tripId).build();
+        ReflectionTestUtils.setField(arrivedTrip, "status", TripStatus.ARRIVED);
+
+        when(tripRepository.findByTripId(tripId)).thenReturn(Optional.of(arrivedTrip));
+
+        // when
+        tripService.startTrip(tripId);
+
+        // then
+        assertThat(arrivedTrip.getStatus()).isEqualTo(TripStatus.IN_PROGRESS);
+        assertThat(arrivedTrip.getStartedAt()).isNotNull(); // 시작 시간이 기록되었는지 확인
+    }
+
+    @Test
+    @DisplayName("운행 시작 처리 실패: 상태가 ARRIVED가 아니면 TripStatusConflictException 발생")
+    void startTrip_Fail_StatusConflict() {
+        // given
+        String tripId = "test-trip-id";
+        Trip matchedTrip = Trip.builder().tripId(tripId).build();
+        ReflectionTestUtils.setField(matchedTrip, "status", TripStatus.MATCHED);
+
+        when(tripRepository.findByTripId(tripId)).thenReturn(Optional.of(matchedTrip));
+
+        // when & then
+        assertThrows(TripStatusConflictException.class, () -> {
+            tripService.startTrip(tripId);
         });
     }
 }

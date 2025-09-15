@@ -79,4 +79,15 @@ public class TripService {
 
         log.info("기사 도착 처리 완료. Trip DB ID: {}", trip.getId());
     }
+
+    public void startTrip(String tripId) {
+        log.info("운행 시작 처리 시작. Trip ID: {}", tripId);
+
+        Trip trip = tripRepository.findByTripId(tripId)
+                                  .orElseThrow(() -> new TripNotFoundException("해당 tripId의 여정을 찾을 수 없습니다: " + tripId));
+
+        trip.start();
+
+        log.info("운행 시작 처리 완료. Trip DB ID: {}", trip.getId());
+    }
 }
