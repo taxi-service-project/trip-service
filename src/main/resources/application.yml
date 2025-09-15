@@ -30,3 +30,9 @@ naver:
   api:
     client-id:
     client-secret:
+
+services:
+  user-service:
+    url: http://localhost:8081
+  driver-service:
+    url: http://localhost:8082

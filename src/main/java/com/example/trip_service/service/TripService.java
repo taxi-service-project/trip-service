@@ -1,8 +1,11 @@
 package com.example.trip_service.service;
 
+import com.example.trip_service.client.DriverServiceClient;
 import com.example.trip_service.client.NaverMapsClient;
+import com.example.trip_service.client.UserServiceClient;
 import com.example.trip_service.dto.CancelTripRequest;
 import com.example.trip_service.dto.CompleteTripRequest;
+import com.example.trip_service.dto.TripDetailsResponse;
 import com.example.trip_service.entity.Trip;
 import com.example.trip_service.exception.TripNotFoundException;
 import com.example.trip_service.kafka.TripKafkaProducer;
@@ -13,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.LocalDateTime;
 
@@ -25,6 +29,9 @@ public class TripService {
     private final TripRepository tripRepository;
     private final NaverMapsClient naverMapsClient;
     private final TripKafkaProducer kafkaProducer;
+
+    private final UserServiceClient userServiceClient;
+    private final DriverServiceClient driverServiceClient;
 
     public Mono<Trip> createTripFromEvent(TripMatchedEvent event) {
         log.info("배차 완료 이벤트 수신. Trip ID: {}, User ID: {}, Driver ID: {}",
@@ -129,5 +136,20 @@ public class TripService {
         kafkaProducer.sendTripCanceledEvent(event);
 
         log.info("여정 취소 처리 완료. Trip DB ID: {}", trip.getId());
+    }
+
+    public Mono<TripDetailsResponse> getTripDetails(String tripId) {
+        return Mono.fromCallable(() -> tripRepository.findByTripId(tripId)
+                                                     .orElseThrow(() -> new TripNotFoundException("해당 tripId의 여정을 찾을 수 없습니다: " + tripId)))
+                   .subscribeOn(Schedulers.boundedElastic()) // DB 조회는 별도 스레드에서
+                   .flatMap(trip -> {
+                       // 2. 사용자 정보와 기사 정보를 병렬로 조회
+                       Mono<UserServiceClient.InternalUserInfo> userInfoMono = userServiceClient.getUserInfo(trip.getUserId());
+                       Mono<DriverServiceClient.InternalDriverInfo> driverInfoMono = driverServiceClient.getDriverInfo(trip.getDriverId());
+
+                       // 3. 모든 정보가 도착하면 최종 DTO로 조합
+                       return Mono.zip(userInfoMono, driverInfoMono)
+                                  .map(tuple -> TripDetailsResponse.of(trip, tuple.getT1(), tuple.getT2()));
+                   });
     }
 }

@@ -1,7 +1,10 @@
 package com.example.trip_service.service;
 
+import com.example.trip_service.client.DriverServiceClient;
+import com.example.trip_service.client.UserServiceClient;
 import com.example.trip_service.dto.CancelTripRequest;
 import com.example.trip_service.dto.CompleteTripRequest;
+import com.example.trip_service.dto.TripDetailsResponse;
 import com.example.trip_service.entity.Trip;
 import com.example.trip_service.entity.TripStatus;
 import com.example.trip_service.exception.TripNotFoundException;
@@ -19,6 +22,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import java.util.Optional;
 
@@ -37,6 +42,11 @@ class TripServiceTest {
     private TripRepository tripRepository;
     @Mock
     private TripKafkaProducer kafkaProducer;
+    @Mock
+    private UserServiceClient userServiceClient;
+    @Mock
+    private DriverServiceClient driverServiceClient;
+
 
     @Test
     @DisplayName("기사 도착 처리 성공: 상태가 MATCHED에서 ARRIVED로 변경되고 이벤트가 발행된다")
@@ -196,5 +206,34 @@ class TripServiceTest {
         assertThrows(TripStatusConflictException.class, () -> {
             tripService.cancelTrip(tripId, request);
         });
+    }
+
+    @Test
+    @DisplayName("여정 상세 정보 조회 성공")
+    void getTripDetails_Success() {
+        // given
+        String tripId = "test-trip-id";
+        Trip trip = Trip.builder().tripId(tripId).userId(101L).driverId(201L).build();
+
+        var userInfo = new UserServiceClient.InternalUserInfo(101L, "홍길동");
+        var driverInfo = new DriverServiceClient.InternalDriverInfo(201L, "김기사", 4.8,
+                new DriverServiceClient.InternalDriverInfo.VehicleInfo("12가3456", "K5"));
+
+        when(tripRepository.findByTripId(tripId)).thenReturn(Optional.of(trip));
+        when(userServiceClient.getUserInfo(101L)).thenReturn(Mono.just(userInfo));
+        when(driverServiceClient.getDriverInfo(201L)).thenReturn(Mono.just(driverInfo));
+
+        // when
+        Mono<TripDetailsResponse> resultMono = tripService.getTripDetails(tripId);
+
+        // then
+        StepVerifier.create(resultMono)
+                    .assertNext(details -> {
+                        assertThat(details.tripId()).isEqualTo(tripId);
+                        assertThat(details.user().name()).isEqualTo("홍길동");
+                        assertThat(details.driver().name()).isEqualTo("김기사");
+                        assertThat(details.driver().licensePlate()).isEqualTo("12가3456");
+                    })
+                    .verifyComplete();
     }
 }

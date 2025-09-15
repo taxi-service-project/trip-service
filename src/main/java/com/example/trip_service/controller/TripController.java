@@ -2,11 +2,13 @@ package com.example.trip_service.controller;
 
 import com.example.trip_service.dto.CancelTripRequest;
 import com.example.trip_service.dto.CompleteTripRequest;
+import com.example.trip_service.dto.TripDetailsResponse;
 import com.example.trip_service.service.TripService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/api/trips")
@@ -39,5 +41,10 @@ public class TripController {
                                            @Valid @RequestBody CancelTripRequest request) {
         tripService.cancelTrip(tripId, request);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{tripId}")
+    public Mono<TripDetailsResponse> getTripDetails(@PathVariable String tripId) {
+        return tripService.getTripDetails(tripId);
     }
 }
