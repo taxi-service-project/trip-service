@@ -1,0 +1,56 @@
+package com.example.trip_service.entity;
+
+import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "trips")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class Trip {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, updatable = false, name = "user_id")
+    private Long userId;
+
+    @Column(nullable = false, updatable = false, name = "driver_id")
+    private Long driverId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private TripStatus status;
+
+    @Column(nullable = false, name = "origin_address")
+    private String originAddress;
+
+    @Column(nullable = false, name = "destination_address")
+    private String destinationAddress;
+
+    private Integer fare;
+
+    @Column(nullable = false, updatable = false, name = "matched_at")
+    private LocalDateTime matchedAt;
+
+    @Column(name = "started_at")
+    private LocalDateTime startedAt;
+
+    @Column(name = "ended_at")
+    private LocalDateTime endedAt;
+
+    @Builder
+    public Trip(Long userId, Long driverId, String originAddress, String destinationAddress, LocalDateTime matchedAt) {
+        this.userId = userId;
+        this.driverId = driverId;
+        this.originAddress = originAddress;
+        this.destinationAddress = destinationAddress;
+        this.matchedAt = matchedAt;
+        this.status = TripStatus.MATCHED; // 생성 시 초기 상태는 'MATCHED'
+    }
+}

@@ -12,3 +12,21 @@ spring:
   h2:
     console:
       enabled: true
+  kafka:
+    bootstrap-servers: 192.168.1.100:9092
+    producer:
+      linger-ms: 5
+      batch-size: 30000
+      buffer-memory: 30000000
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      group-id: trip-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+naver:
+  api:
+    client-id:
+    client-secret:
