@@ -2,6 +2,7 @@ package com.example.trip_service.service;
 
 import com.example.trip_service.client.NaverMapsClient;
 import com.example.trip_service.entity.Trip;
+import com.example.trip_service.kafka.dto.PaymentCompletedEvent;
 import com.example.trip_service.kafka.dto.TripMatchedEvent;
 import com.example.trip_service.repository.TripRepository;
 import lombok.RequiredArgsConstructor;
@@ -45,5 +46,19 @@ public class TripService {
                        return tripRepository.save(trip);
                    })
                    .doOnSuccess(trip -> log.info("새로운 여정 생성 완료. DB ID: {}", event.tripId()));
+    }
+
+    public void updateTripFare(PaymentCompletedEvent event) {
+        log.info("결제 완료 이벤트 수신. Trip ID: {}, Fare: {}", event.tripId(), event.fare());
+
+        tripRepository.findByTripId(event.tripId()).ifPresentOrElse(
+                trip -> {
+                    trip.updateFare(event.fare());
+                    log.info("여정 요금 업데이트 완료. DB ID: {}", trip.getTripId());
+                },
+                () -> {
+                    log.error("결제 완료 이벤트를 처리할 여정을 찾지 못했습니다. Trip ID: {}", event.tripId());
+                }
+        );
     }
 }

@@ -3,6 +3,7 @@ package com.example.trip_service;
 import com.example.trip_service.client.NaverMapsClient;
 import com.example.trip_service.entity.Trip;
 import com.example.trip_service.entity.TripStatus;
+import com.example.trip_service.kafka.dto.PaymentCompletedEvent;
 import com.example.trip_service.kafka.dto.TripMatchedEvent;
 import com.example.trip_service.repository.TripRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -12,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import reactor.core.publisher.Mono;
@@ -37,7 +37,7 @@ import static org.mockito.Mockito.when;
 class TripEventConsumerIntegrationTest {
 
     @Autowired
-    private KafkaTemplate<String, TripMatchedEvent> kafkaTemplate;
+    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Autowired
     private TripRepository tripRepository;
@@ -89,6 +89,36 @@ class TripEventConsumerIntegrationTest {
             // 2. Mocking한 Naver API의 응답(가짜 주소)이 잘 저장되었는지 확인
             assertThat(savedTrip.getOriginAddress()).isEqualTo("서울시 강남구 (가짜 출발지 주소)");
             assertThat(savedTrip.getDestinationAddress()).isEqualTo("서울시 서초구 (가짜 목적지 주소)");
+        });
+    }
+
+    @Test
+    @DisplayName("PaymentCompleted 이벤트를 수신하면 기존 Trip 엔티티의 요금(fare)이 업데이트되어야 한다")
+    void handlePaymentCompletedEvent_Success() {
+        // given: 먼저 테스트할 Trip 데이터를 DB에 저장
+        String targetTripId = "test-trip-for-payment";
+        Trip existingTrip = Trip.builder()
+                                .tripId(targetTripId)
+                                .userId(1L)
+                                .driverId(1L)
+                                .originAddress("출발지")
+                                .destinationAddress("목적지")
+                                .matchedAt(LocalDateTime.now())
+                                .build();
+        tripRepository.save(existingTrip);
+
+        // 업데이트할 요금 정보를 담은 이벤트 생성
+        PaymentCompletedEvent event = new PaymentCompletedEvent(targetTripId, 15000);
+
+        // when: 'payment_events' 토픽으로 이벤트 발행
+        kafkaTemplate.send("payment_events", event);
+
+        // then: DB의 해당 Trip 데이터에 fare가 업데이트될 때까지 기다린 후 검증
+        await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+            Trip updatedTrip = tripRepository.findByTripId(targetTripId).orElseThrow();
+
+            assertThat(updatedTrip.getFare()).isNotNull();
+            assertThat(updatedTrip.getFare()).isEqualTo(15000);
         });
     }
 }
