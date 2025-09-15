@@ -13,9 +13,8 @@ import java.time.LocalDateTime;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Trip {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(nullable = false, updatable = false, unique = true)
+    private String tripId;
 
     @Column(nullable = false, updatable = false, name = "user_id")
     private Long userId;
@@ -45,12 +44,17 @@ public class Trip {
     private LocalDateTime endedAt;
 
     @Builder
-    public Trip(Long userId, Long driverId, String originAddress, String destinationAddress, LocalDateTime matchedAt) {
+    public Trip(String tripId, Long userId, Long driverId, String originAddress, String destinationAddress, LocalDateTime matchedAt) {
+        this.tripId = tripId;
         this.userId = userId;
         this.driverId = driverId;
         this.originAddress = originAddress;
         this.destinationAddress = destinationAddress;
         this.matchedAt = matchedAt;
-        this.status = TripStatus.MATCHED; // 생성 시 초기 상태는 'MATCHED'
+        this.status = TripStatus.MATCHED;
+    }
+
+    public void updateFare(Integer fare) {
+        this.fare = fare;
     }
 }

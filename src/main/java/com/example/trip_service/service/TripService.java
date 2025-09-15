@@ -34,6 +34,7 @@ public class TripService {
                        String destinationAddress = addressPair.getT2();
 
                        Trip trip = Trip.builder()
+                                       .tripId(event.tripId())
                                        .userId(event.userId())
                                        .driverId(event.driverId())
                                        .originAddress(originAddress)
@@ -43,6 +44,6 @@ public class TripService {
 
                        return tripRepository.save(trip);
                    })
-                   .doOnSuccess(trip -> log.info("새로운 여정 생성 완료. DB ID: {}", trip.getId()));
+                   .doOnSuccess(trip -> log.info("새로운 여정 생성 완료. DB ID: {}", event.tripId()));
     }
 }
