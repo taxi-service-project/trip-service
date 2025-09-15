@@ -1,11 +1,13 @@
 package com.example.trip_service.service;
 
+import com.example.trip_service.dto.CompleteTripRequest;
 import com.example.trip_service.entity.Trip;
 import com.example.trip_service.entity.TripStatus;
 import com.example.trip_service.exception.TripNotFoundException;
 import com.example.trip_service.exception.TripStatusConflictException;
 import com.example.trip_service.kafka.TripKafkaProducer;
 import com.example.trip_service.kafka.dto.DriverArrivedEvent;
+import com.example.trip_service.kafka.dto.TripCompletedEvent;
 import com.example.trip_service.repository.TripRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -123,5 +125,31 @@ class TripServiceTest {
         assertThrows(TripStatusConflictException.class, () -> {
             tripService.startTrip(tripId);
         });
+    }
+
+    @Test
+    @DisplayName("운행 종료 처리 성공: 상태가 COMPLETED로 변경되고 이벤트가 발행된다")
+    void completeTrip_Success() {
+        // given
+        String tripId = "test-trip-id";
+        CompleteTripRequest request = new CompleteTripRequest(5000, 1200);
+        Trip inProgressTrip = Trip.builder().tripId(tripId).userId(101L).build();
+        ReflectionTestUtils.setField(inProgressTrip, "status", TripStatus.IN_PROGRESS);
+
+        when(tripRepository.findByTripId(tripId)).thenReturn(Optional.of(inProgressTrip));
+
+        // when
+        tripService.completeTrip(tripId, request);
+
+        // then
+        assertThat(inProgressTrip.getStatus()).isEqualTo(TripStatus.COMPLETED);
+        assertThat(inProgressTrip.getEndedAt()).isNotNull();
+
+        ArgumentCaptor<TripCompletedEvent> eventCaptor = ArgumentCaptor.forClass(TripCompletedEvent.class);
+        verify(kafkaProducer).sendTripCompletedEvent(eventCaptor.capture());
+
+        TripCompletedEvent capturedEvent = eventCaptor.getValue();
+        assertThat(capturedEvent.tripId()).isEqualTo(tripId);
+        assertThat(capturedEvent.distanceMeters()).isEqualTo(5000);
     }
 }

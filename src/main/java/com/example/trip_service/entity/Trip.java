@@ -78,4 +78,13 @@ public class Trip {
         this.startedAt = LocalDateTime.now();
     }
 
+    public LocalDateTime complete() {
+        if (this.status != TripStatus.IN_PROGRESS) {
+            throw new TripStatusConflictException("운행을 종료할 수 없는 상태입니다. 현재 상태: " + this.status);
+        }
+        this.status = TripStatus.COMPLETED;
+        this.endedAt = LocalDateTime.now();
+        return this.endedAt;
+    }
+
 }

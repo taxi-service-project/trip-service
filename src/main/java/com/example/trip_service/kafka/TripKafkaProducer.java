@@ -1,6 +1,7 @@
 package com.example.trip_service.kafka;
 
 import com.example.trip_service.kafka.dto.DriverArrivedEvent;
+import com.example.trip_service.kafka.dto.TripCompletedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -15,6 +16,11 @@ public class TripKafkaProducer {
 
     public void sendDriverArrivedEvent(DriverArrivedEvent event) {
         log.info("기사 도착 이벤트 발행 -> topic: {}, tripId: {}", TOPIC, event.tripId());
+        kafkaTemplate.send(TOPIC, event);
+    }
+
+    public void sendTripCompletedEvent(TripCompletedEvent event) {
+        log.info("운행 완료 이벤트 발행 -> topic: {}, tripId: {}", TOPIC, event.tripId());
         kafkaTemplate.send(TOPIC, event);
     }
 }

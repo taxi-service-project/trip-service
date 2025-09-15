@@ -1,11 +1,13 @@
 package com.example.trip_service.service;
 
 import com.example.trip_service.client.NaverMapsClient;
+import com.example.trip_service.dto.CompleteTripRequest;
 import com.example.trip_service.entity.Trip;
 import com.example.trip_service.exception.TripNotFoundException;
 import com.example.trip_service.kafka.TripKafkaProducer;
 import com.example.trip_service.kafka.dto.DriverArrivedEvent;
 import com.example.trip_service.kafka.dto.PaymentCompletedEvent;
+import com.example.trip_service.kafka.dto.TripCompletedEvent;
 import com.example.trip_service.kafka.dto.TripMatchedEvent;
 import com.example.trip_service.repository.TripRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
+
+import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -89,5 +93,25 @@ public class TripService {
         trip.start();
 
         log.info("운행 시작 처리 완료. Trip DB ID: {}", trip.getId());
+    }
+
+    public void completeTrip(String tripId, CompleteTripRequest request) {
+        log.info("운행 종료 처리 시작. Trip ID: {}", tripId);
+
+        Trip trip = tripRepository.findByTripId(tripId)
+                                  .orElseThrow(() -> new TripNotFoundException("해당 tripId의 여정을 찾을 수 없습니다: " + tripId));
+
+        LocalDateTime endedAt = trip.complete();
+
+        TripCompletedEvent event = new TripCompletedEvent(
+                trip.getTripId(),
+                trip.getUserId(),
+                request.distanceMeters(),
+                request.durationSeconds(),
+                endedAt
+        );
+        kafkaProducer.sendTripCompletedEvent(event);
+
+        log.info("운행 종료 처리 완료. Trip DB ID: {}", trip.getId());
     }
 }
