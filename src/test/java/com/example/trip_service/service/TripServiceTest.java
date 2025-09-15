@@ -1,5 +1,6 @@
 package com.example.trip_service.service;
 
+import com.example.trip_service.dto.CancelTripRequest;
 import com.example.trip_service.dto.CompleteTripRequest;
 import com.example.trip_service.entity.Trip;
 import com.example.trip_service.entity.TripStatus;
@@ -7,6 +8,7 @@ import com.example.trip_service.exception.TripNotFoundException;
 import com.example.trip_service.exception.TripStatusConflictException;
 import com.example.trip_service.kafka.TripKafkaProducer;
 import com.example.trip_service.kafka.dto.DriverArrivedEvent;
+import com.example.trip_service.kafka.dto.TripCanceledEvent;
 import com.example.trip_service.kafka.dto.TripCompletedEvent;
 import com.example.trip_service.repository.TripRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -151,5 +153,48 @@ class TripServiceTest {
         TripCompletedEvent capturedEvent = eventCaptor.getValue();
         assertThat(capturedEvent.tripId()).isEqualTo(tripId);
         assertThat(capturedEvent.distanceMeters()).isEqualTo(5000);
+    }
+
+    @Test
+    @DisplayName("여정 취소 처리 성공: 상태가 CANCELED로 변경되고 이벤트가 발행된다")
+    void cancelTrip_Success() {
+        // given
+        String tripId = "test-trip-id";
+        CancelTripRequest request = new CancelTripRequest("USER");
+        Trip inProgressTrip = Trip.builder().tripId(tripId).driverId(201L).build();
+        ReflectionTestUtils.setField(inProgressTrip, "status", TripStatus.IN_PROGRESS);
+
+        when(tripRepository.findByTripId(tripId)).thenReturn(Optional.of(inProgressTrip));
+
+        // when
+        tripService.cancelTrip(tripId, request);
+
+        // then
+        assertThat(inProgressTrip.getStatus()).isEqualTo(TripStatus.CANCELED);
+
+        // Kafka 이벤트 발행 검증
+        ArgumentCaptor<TripCanceledEvent> eventCaptor = ArgumentCaptor.forClass(TripCanceledEvent.class);
+        verify(kafkaProducer).sendTripCanceledEvent(eventCaptor.capture());
+
+        TripCanceledEvent capturedEvent = eventCaptor.getValue();
+        assertThat(capturedEvent.tripId()).isEqualTo(tripId);
+        assertThat(capturedEvent.canceledBy()).isEqualTo("USER");
+    }
+
+    @Test
+    @DisplayName("여정 취소 처리 실패: 이미 완료된 여정은 취소할 수 없다")
+    void cancelTrip_Fail_AlreadyCompleted() {
+        // given
+        String tripId = "test-trip-id";
+        CancelTripRequest request = new CancelTripRequest("DRIVER");
+        Trip completedTrip = Trip.builder().tripId(tripId).build();
+        ReflectionTestUtils.setField(completedTrip, "status", TripStatus.COMPLETED);
+
+        when(tripRepository.findByTripId(tripId)).thenReturn(Optional.of(completedTrip));
+
+        // when & then
+        assertThrows(TripStatusConflictException.class, () -> {
+            tripService.cancelTrip(tripId, request);
+        });
     }
 }

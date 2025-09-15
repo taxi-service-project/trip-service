@@ -87,4 +87,10 @@ public class Trip {
         return this.endedAt;
     }
 
+    public void cancel() {
+        if (this.status == TripStatus.COMPLETED || this.status == TripStatus.CANCELED) {
+            throw new TripStatusConflictException("이미 종료되어 취소할 수 없는 여정입니다. 현재 상태: " + this.status);
+        }
+        this.status = TripStatus.CANCELED;
+    }
 }

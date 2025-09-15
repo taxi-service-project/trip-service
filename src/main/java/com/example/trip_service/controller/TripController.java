@@ -1,5 +1,6 @@
 package com.example.trip_service.controller;
 
+import com.example.trip_service.dto.CancelTripRequest;
 import com.example.trip_service.dto.CompleteTripRequest;
 import com.example.trip_service.service.TripService;
 import jakarta.validation.Valid;
@@ -30,6 +31,13 @@ public class TripController {
     public ResponseEntity<Void> completeTrip(@PathVariable String tripId,
                                              @Valid @RequestBody CompleteTripRequest request) {
         tripService.completeTrip(tripId, request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{tripId}/cancel")
+    public ResponseEntity<Void> cancelTrip(@PathVariable String tripId,
+                                           @Valid @RequestBody CancelTripRequest request) {
+        tripService.cancelTrip(tripId, request);
         return ResponseEntity.noContent().build();
     }
 }

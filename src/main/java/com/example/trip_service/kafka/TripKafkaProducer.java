@@ -1,6 +1,7 @@
 package com.example.trip_service.kafka;
 
 import com.example.trip_service.kafka.dto.DriverArrivedEvent;
+import com.example.trip_service.kafka.dto.TripCanceledEvent;
 import com.example.trip_service.kafka.dto.TripCompletedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,11 @@ public class TripKafkaProducer {
 
     public void sendTripCompletedEvent(TripCompletedEvent event) {
         log.info("운행 완료 이벤트 발행 -> topic: {}, tripId: {}", TOPIC, event.tripId());
+        kafkaTemplate.send(TOPIC, event);
+    }
+
+    public void sendTripCanceledEvent(TripCanceledEvent event) {
+        log.info("여정 취소 이벤트 발행 -> topic: {}, tripId: {}", TOPIC, event.tripId());
         kafkaTemplate.send(TOPIC, event);
     }
 }

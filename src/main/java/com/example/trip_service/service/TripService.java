@@ -1,14 +1,12 @@
 package com.example.trip_service.service;
 
 import com.example.trip_service.client.NaverMapsClient;
+import com.example.trip_service.dto.CancelTripRequest;
 import com.example.trip_service.dto.CompleteTripRequest;
 import com.example.trip_service.entity.Trip;
 import com.example.trip_service.exception.TripNotFoundException;
 import com.example.trip_service.kafka.TripKafkaProducer;
-import com.example.trip_service.kafka.dto.DriverArrivedEvent;
-import com.example.trip_service.kafka.dto.PaymentCompletedEvent;
-import com.example.trip_service.kafka.dto.TripCompletedEvent;
-import com.example.trip_service.kafka.dto.TripMatchedEvent;
+import com.example.trip_service.kafka.dto.*;
 import com.example.trip_service.repository.TripRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -113,5 +111,23 @@ public class TripService {
         kafkaProducer.sendTripCompletedEvent(event);
 
         log.info("운행 종료 처리 완료. Trip DB ID: {}", trip.getId());
+    }
+
+    public void cancelTrip(String tripId, CancelTripRequest request) {
+        log.info("여정 취소 처리 시작. Trip ID: {}, Canceled by: {}", tripId, request.canceledBy());
+
+        Trip trip = tripRepository.findByTripId(tripId)
+                                  .orElseThrow(() -> new TripNotFoundException("해당 tripId의 여정을 찾을 수 없습니다: " + tripId));
+
+        trip.cancel();
+
+        TripCanceledEvent event = new TripCanceledEvent(
+                trip.getTripId(),
+                trip.getDriverId(),
+                request.canceledBy()
+        );
+        kafkaProducer.sendTripCanceledEvent(event);
+
+        log.info("여정 취소 처리 완료. Trip DB ID: {}", trip.getId());
     }
 }
