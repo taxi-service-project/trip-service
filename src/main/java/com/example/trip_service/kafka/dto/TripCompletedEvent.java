@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 
 public record TripCompletedEvent(
         String tripId,
-        Long userId,
+        String userId,
         Integer distanceMeters,
         Integer durationSeconds,
         LocalDateTime endedAt

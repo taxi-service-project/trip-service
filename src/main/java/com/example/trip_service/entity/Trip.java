@@ -22,10 +22,10 @@ public class Trip {
     private String tripId;
 
     @Column(nullable = false, updatable = false, name = "user_id")
-    private Long userId;
+    private String userId;
 
     @Column(nullable = false, updatable = false, name = "driver_id")
-    private Long driverId;
+    private String driverId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -49,7 +49,7 @@ public class Trip {
     private LocalDateTime endedAt;
 
     @Builder
-    public Trip(String tripId, Long userId, Long driverId, String originAddress, String destinationAddress, LocalDateTime matchedAt) {
+    public Trip(String tripId, String userId, String driverId, String originAddress, String destinationAddress, LocalDateTime matchedAt) {
         this.tripId = tripId;
         this.userId = userId;
         this.driverId = driverId;

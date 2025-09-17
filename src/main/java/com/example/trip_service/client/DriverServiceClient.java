@@ -11,7 +11,7 @@ import reactor.core.publisher.Mono;
 public class DriverServiceClient {
     private final WebClient webClient;
 
-    public record InternalDriverInfo(Long id, String name, Double ratingAvg, VehicleInfo vehicle) {
+    public record InternalDriverInfo(String driverId, String name, Double ratingAvg, VehicleInfo vehicle) {
         public record VehicleInfo(String licensePlate, String model) {}
     }
 
@@ -20,7 +20,7 @@ public class DriverServiceClient {
         this.webClient = builder.baseUrl(serviceUrl).build();
     }
 
-    public Mono<InternalDriverInfo> getDriverInfo(Long driverId) {
+    public Mono<InternalDriverInfo> getDriverInfo(String driverId) {
         return webClient.get()
                         .uri("/internal/api/drivers/{driverId}", driverId)
                         .retrieve()

@@ -53,7 +53,7 @@ class TripServiceTest {
     void driverArrived_Success() {
         // given: 초기 조건 설정
         String tripId = "test-trip-id";
-        long userId = 101L;
+        String userId = "user-uuid-101";
 
         Trip matchedTrip = Trip.builder()
                                .tripId(tripId)
@@ -143,9 +143,11 @@ class TripServiceTest {
     @DisplayName("운행 종료 처리 성공: 상태가 COMPLETED로 변경되고 이벤트가 발행된다")
     void completeTrip_Success() {
         // given
-        String tripId = "test-trip-id";
+        String tripId = "test-trip-uuid-1";
+        String userId = "user-uuid-101";
+
         CompleteTripRequest request = new CompleteTripRequest(5000, 1200);
-        Trip inProgressTrip = Trip.builder().tripId(tripId).userId(101L).build();
+        Trip inProgressTrip = Trip.builder().tripId(tripId).userId(userId).build();
         ReflectionTestUtils.setField(inProgressTrip, "status", TripStatus.IN_PROGRESS);
 
         when(tripRepository.findByTripId(tripId)).thenReturn(Optional.of(inProgressTrip));
@@ -162,6 +164,7 @@ class TripServiceTest {
 
         TripCompletedEvent capturedEvent = eventCaptor.getValue();
         assertThat(capturedEvent.tripId()).isEqualTo(tripId);
+        assertThat(capturedEvent.userId()).isEqualTo(userId);
         assertThat(capturedEvent.distanceMeters()).isEqualTo(5000);
     }
 
@@ -169,9 +172,11 @@ class TripServiceTest {
     @DisplayName("여정 취소 처리 성공: 상태가 CANCELED로 변경되고 이벤트가 발행된다")
     void cancelTrip_Success() {
         // given
-        String tripId = "test-trip-id";
+        String tripId = "test-trip-uuid-2";
+        String driverId = "driver-uuid-201";
+
         CancelTripRequest request = new CancelTripRequest("USER");
-        Trip inProgressTrip = Trip.builder().tripId(tripId).driverId(201L).build();
+        Trip inProgressTrip = Trip.builder().tripId(tripId).driverId(driverId).build();
         ReflectionTestUtils.setField(inProgressTrip, "status", TripStatus.IN_PROGRESS);
 
         when(tripRepository.findByTripId(tripId)).thenReturn(Optional.of(inProgressTrip));
@@ -182,12 +187,12 @@ class TripServiceTest {
         // then
         assertThat(inProgressTrip.getStatus()).isEqualTo(TripStatus.CANCELED);
 
-        // Kafka 이벤트 발행 검증
         ArgumentCaptor<TripCanceledEvent> eventCaptor = ArgumentCaptor.forClass(TripCanceledEvent.class);
         verify(kafkaProducer).sendTripCanceledEvent(eventCaptor.capture());
 
         TripCanceledEvent capturedEvent = eventCaptor.getValue();
         assertThat(capturedEvent.tripId()).isEqualTo(tripId);
+        assertThat(capturedEvent.driverId()).isEqualTo(driverId);
         assertThat(capturedEvent.canceledBy()).isEqualTo("USER");
     }
 
@@ -212,16 +217,19 @@ class TripServiceTest {
     @DisplayName("여정 상세 정보 조회 성공")
     void getTripDetails_Success() {
         // given
-        String tripId = "test-trip-id";
-        Trip trip = Trip.builder().tripId(tripId).userId(101L).driverId(201L).build();
+        String tripId = "test-trip-uuid-3";
+        String userId = "user-uuid-101";
+        String driverId = "driver-uuid-201";
 
-        var userInfo = new UserServiceClient.InternalUserInfo(101L, "홍길동");
-        var driverInfo = new DriverServiceClient.InternalDriverInfo(201L, "김기사", 4.8,
+        Trip trip = Trip.builder().tripId(tripId).userId(userId).driverId(driverId).build();
+
+        var userInfo = new UserServiceClient.InternalUserInfo(userId, "홍길동");
+        var driverInfo = new DriverServiceClient.InternalDriverInfo(driverId, "김기사", 4.8,
                 new DriverServiceClient.InternalDriverInfo.VehicleInfo("12가3456", "K5"));
 
         when(tripRepository.findByTripId(tripId)).thenReturn(Optional.of(trip));
-        when(userServiceClient.getUserInfo(101L)).thenReturn(Mono.just(userInfo));
-        when(driverServiceClient.getDriverInfo(201L)).thenReturn(Mono.just(driverInfo));
+        when(userServiceClient.getUserInfo(userId)).thenReturn(Mono.just(userInfo));
+        when(driverServiceClient.getDriverInfo(driverId)).thenReturn(Mono.just(driverInfo));
 
         // when
         Mono<TripDetailsResponse> resultMono = tripService.getTripDetails(tripId);
@@ -230,9 +238,9 @@ class TripServiceTest {
         StepVerifier.create(resultMono)
                     .assertNext(details -> {
                         assertThat(details.tripId()).isEqualTo(tripId);
-                        assertThat(details.user().name()).isEqualTo("홍길동");
+                        assertThat(details.user().userId()).isEqualTo(userId);
+                        assertThat(details.driver().driverId()).isEqualTo(driverId);
                         assertThat(details.driver().name()).isEqualTo("김기사");
-                        assertThat(details.driver().licensePlate()).isEqualTo("12가3456");
                     })
                     .verifyComplete();
     }

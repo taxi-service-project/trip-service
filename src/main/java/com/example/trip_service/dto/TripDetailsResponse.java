@@ -21,8 +21,9 @@ public record TripDetailsResponse(
         UserInfo user,
         DriverInfo driver
 ) {
-    public record UserInfo(Long id, String name) {}
-    public record DriverInfo(Long id, String name, Double ratingAvg, String licensePlate, String model) {}
+    public record UserInfo(String userId, String name) {}
+
+    public record DriverInfo(String driverId, String name, Double ratingAvg, String licensePlate, String model) {}
 
     public static TripDetailsResponse of(Trip trip, InternalUserInfo userInfo, InternalDriverInfo driverInfo) {
         return TripDetailsResponse.builder()
@@ -34,8 +35,8 @@ public record TripDetailsResponse(
                                   .matchedAt(trip.getMatchedAt())
                                   .startedAt(trip.getStartedAt())
                                   .endedAt(trip.getEndedAt())
-                                  .user(new UserInfo(userInfo.id(), userInfo.name()))
-                                  .driver(new DriverInfo(driverInfo.id(), driverInfo.name(), driverInfo.ratingAvg(),
+                                  .user(new UserInfo(userInfo.userId(), userInfo.name()))
+                                  .driver(new DriverInfo(driverInfo.driverId(), driverInfo.name(), driverInfo.ratingAvg(),
                                           driverInfo.vehicle().licensePlate(), driverInfo.vehicle().model()))
                                   .build();
     }

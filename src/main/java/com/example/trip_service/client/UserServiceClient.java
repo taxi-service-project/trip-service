@@ -11,14 +11,14 @@ import reactor.core.publisher.Mono;
 public class UserServiceClient {
     private final WebClient webClient;
 
-    public record InternalUserInfo(Long id, String name) {}
+    public record InternalUserInfo(String userId, String name) {}
 
     public UserServiceClient(WebClient.Builder builder,
                              @Value("${services.user-service.url}") String serviceUrl) {
         this.webClient = builder.baseUrl(serviceUrl).build();
     }
 
-    public Mono<InternalUserInfo> getUserInfo(Long userId) {
+    public Mono<InternalUserInfo> getUserInfo(String userId) {
         return webClient.get()
                         .uri("/internal/api/users/{userId}", userId)
                         .retrieve()
