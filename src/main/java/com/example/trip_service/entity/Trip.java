@@ -93,4 +93,10 @@ public class Trip {
         }
         this.status = TripStatus.CANCELED;
     }
+
+    public void revertCompletion() {
+        if (this.status == TripStatus.COMPLETED) {
+            this.status = TripStatus.PAYMENT_FAILED;
+        }
+    }
 }

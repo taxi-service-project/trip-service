@@ -152,4 +152,16 @@ public class TripService {
                                   .map(tuple -> TripDetailsResponse.of(trip, tuple.getT1(), tuple.getT2()));
                    });
     }
+
+    public void revertTripCompletion(PaymentFailedEvent event) {
+        log.warn("결제 실패로 인한 보상 트랜잭션 시작. Trip ID: {}", event.tripId());
+
+        tripRepository.findByTripId(event.tripId()).ifPresentOrElse(
+                trip -> {
+                    trip.revertCompletion();
+                    log.info("여정 상태 롤백 완료. Trip DB ID: {}. New Status: {}", trip.getId(), trip.getStatus());
+                },
+                () -> log.error("보상 트랜잭션을 처리할 여정을 찾지 못했습니다. Trip ID: {}", event.tripId())
+        );
+    }
 }

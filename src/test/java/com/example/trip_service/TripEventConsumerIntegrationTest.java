@@ -108,7 +108,7 @@ class TripEventConsumerIntegrationTest {
                                 .build();
         tripRepository.save(existingTrip);
 
-        PaymentCompletedEvent event = new PaymentCompletedEvent(targetTripId, 15000);
+        PaymentCompletedEvent event = new PaymentCompletedEvent(targetTripId, 15000, "user-uuid-1");
 
         // when
         kafkaTemplate.send("payment_events", event);

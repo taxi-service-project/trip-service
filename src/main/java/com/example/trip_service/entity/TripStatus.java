@@ -5,5 +5,6 @@ public enum TripStatus {
     ARRIVED,      // 기사 도착
     IN_PROGRESS,  // 운행 중
     COMPLETED,    // 운행 완료
-    CANCELED      // 취소됨
+    CANCELED,      // 취소됨
+    PAYMENT_FAILED // 결제 실패 상태
 }
