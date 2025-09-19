@@ -7,7 +7,9 @@ import com.example.trip_service.dto.CancelTripRequest;
 import com.example.trip_service.dto.CompleteTripRequest;
 import com.example.trip_service.dto.TripDetailsResponse;
 import com.example.trip_service.entity.Trip;
+import com.example.trip_service.entity.TripStatus;
 import com.example.trip_service.exception.TripNotFoundException;
+import com.example.trip_service.handler.TrackingWebSocketHandler;
 import com.example.trip_service.kafka.TripKafkaProducer;
 import com.example.trip_service.kafka.dto.*;
 import com.example.trip_service.repository.TripRepository;
@@ -19,6 +21,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +35,8 @@ public class TripService {
 
     private final UserServiceClient userServiceClient;
     private final DriverServiceClient driverServiceClient;
+
+    private final TrackingWebSocketHandler trackingWebSocketHandler;
 
     public Mono<Trip> createTripFromEvent(TripMatchedEvent event) {
         log.info("배차 완료 이벤트 수신. Trip ID: {}, User ID: {}, Driver ID: {}",
@@ -164,4 +169,15 @@ public class TripService {
                 () -> log.error("보상 트랜잭션을 처리할 여정을 찾지 못했습니다. Trip ID: {}", event.tripId())
         );
     }
+
+    public void forwardDriverLocationToPassenger(DriverLocationUpdatedEvent event) {
+        List<TripStatus> activeStatuses = List.of(TripStatus.MATCHED, TripStatus.ARRIVED, TripStatus.IN_PROGRESS);
+
+        tripRepository.findFirstByDriverIdAndStatusIn(event.driverId(), activeStatuses)
+                      .ifPresent(trip -> {
+                          log.debug("기사 위치 정보 전달. Trip ID: {}", trip.getTripId());
+                          trackingWebSocketHandler.sendLocationUpdate(trip.getTripId(), event);
+                      });
+    }
+
 }

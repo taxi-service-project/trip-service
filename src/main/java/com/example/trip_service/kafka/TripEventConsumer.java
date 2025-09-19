@@ -1,5 +1,6 @@
 package com.example.trip_service.kafka;
 
+import com.example.trip_service.kafka.dto.DriverLocationUpdatedEvent;
 import com.example.trip_service.kafka.dto.PaymentCompletedEvent;
 import com.example.trip_service.kafka.dto.PaymentFailedEvent;
 import com.example.trip_service.kafka.dto.TripMatchedEvent;
@@ -43,6 +44,11 @@ public class TripEventConsumer {
         } catch (Exception e) {
             log.error("결제 실패 이벤트 처리(보상 트랜잭션) 중 오류 발생. event: {}", event, e);
         }
+    }
+
+    @KafkaHandler
+    public void handleDriverLocationUpdatedEvent(DriverLocationUpdatedEvent event) {
+        tripService.forwardDriverLocationToPassenger(event);
     }
 
     @KafkaHandler(isDefault = true)
