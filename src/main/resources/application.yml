@@ -15,16 +15,47 @@ spring:
   kafka:
     bootstrap-servers: 192.168.1.100:9092
     producer:
-      linger-ms: 5
-      batch-size: 30000
-      buffer-memory: 30000000
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        enable.idempotence: true
+        delivery.timeout.ms: 120000
+        linger.ms: 50
+        batch.size: 131072
+        request.timeout.ms: 30000
     consumer:
       group-id: trip-service-group
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        max.poll.records: 500
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      driver-service:
+        failure-rate-threshold: 50
+        minimum-number-of-calls: 10
+        sliding-window-type: count-based
+        sliding-window-size: 20
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 5
+      user-service:
+        failure-rate-threshold: 50
+        minimum-number-of-calls: 10
+        sliding-window-type: count-based
+        sliding-window-size: 20
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 5
+      naver-service:
+        failure-rate-threshold: 50
+        minimum-number-of-calls: 10
+        sliding-window-type: count-based
+        sliding-window-size: 20
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 5
 
 naver:
   api:

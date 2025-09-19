@@ -32,10 +32,8 @@ public class TripService {
     private final TripRepository tripRepository;
     private final NaverMapsClient naverMapsClient;
     private final TripKafkaProducer kafkaProducer;
-
     private final UserServiceClient userServiceClient;
     private final DriverServiceClient driverServiceClient;
-
     private final TrackingWebSocketHandler trackingWebSocketHandler;
 
     public Mono<Trip> createTripFromEvent(TripMatchedEvent event) {
