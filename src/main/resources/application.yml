@@ -72,9 +72,9 @@ naver:
 
 services:
   user-service:
-    url: http://localhost:8080/user
+    url: http://user-service
   driver-service:
-    url: http://localhost:8080/driver
+    url: http://driver-service
 
 eureka:
   client:

@@ -54,6 +54,8 @@ dependencies {
 	implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-reactor-resilience4j'
 
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-server'
+
 	testImplementation 'org.springframework.kafka:spring-kafka-test'
 	testImplementation 'org.awaitility:awaitility'
 
