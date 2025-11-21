@@ -13,20 +13,21 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class TripKafkaProducer {
     private static final String TOPIC = "trip_events";
+
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public void sendDriverArrivedEvent(DriverArrivedEvent event) {
         log.info("기사 도착 이벤트 발행 -> topic: {}, tripId: {}", TOPIC, event.tripId());
-        kafkaTemplate.send(TOPIC, event);
+        kafkaTemplate.send(TOPIC, event.tripId(), event);
     }
 
     public void sendTripCompletedEvent(TripCompletedEvent event) {
         log.info("운행 완료 이벤트 발행 -> topic: {}, tripId: {}", TOPIC, event.tripId());
-        kafkaTemplate.send(TOPIC, event);
+        kafkaTemplate.send(TOPIC, event.tripId(), event);
     }
 
     public void sendTripCanceledEvent(TripCanceledEvent event) {
         log.info("여정 취소 이벤트 발행 -> topic: {}, tripId: {}", TOPIC, event.tripId());
-        kafkaTemplate.send(TOPIC, event);
+        kafkaTemplate.send(TOPIC, event.tripId(), event);
     }
 }
