@@ -18,7 +18,7 @@ public class Trip {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, updatable = false, unique = true)
+    @Column(nullable = false, updatable = false, unique = true, name = "trip_id")
     private String tripId;
 
     @Column(nullable = false, updatable = false, name = "user_id")
