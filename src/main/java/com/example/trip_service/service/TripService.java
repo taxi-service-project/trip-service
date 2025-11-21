@@ -42,9 +42,12 @@ public class TripService {
         log.info("배차 완료 이벤트 수신. Trip ID: {}", event.tripId());
 
         Mono<String> originMono = naverMapsClient.reverseGeocode(
-                event.origin().longitude(), event.origin().latitude());
+                                                         event.origin().longitude(), event.origin().latitude())
+                                                 .onErrorReturn("출발지 주소 확인 불가");
+
         Mono<String> destMono = naverMapsClient.reverseGeocode(
-                event.destination().longitude(), event.destination().latitude());
+                                                       event.destination().longitude(), event.destination().latitude())
+                                               .onErrorReturn("목적지 주소 확인 불가");
 
         return Mono.zip(originMono, destMono)
                    .flatMap(tuple -> {
