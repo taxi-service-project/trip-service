@@ -37,6 +37,8 @@ spring:
       properties:
         spring.json.trusted.packages: "*"
         max.poll.records: 500
+    listener:
+      ack-mode: RECORD
 
 resilience4j:
   circuitbreaker:
