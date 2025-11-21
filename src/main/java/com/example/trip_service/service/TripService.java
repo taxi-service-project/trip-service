@@ -7,7 +7,6 @@ import com.example.trip_service.dto.CancelTripRequest;
 import com.example.trip_service.dto.CompleteTripRequest;
 import com.example.trip_service.dto.TripDetailsResponse;
 import com.example.trip_service.entity.Trip;
-import com.example.trip_service.entity.TripStatus;
 import com.example.trip_service.exception.TripNotFoundException;
 import com.example.trip_service.handler.TrackingWebSocketHandler;
 import com.example.trip_service.kafka.TripKafkaProducer;
@@ -15,17 +14,17 @@ import com.example.trip_service.kafka.dto.*;
 import com.example.trip_service.repository.TripRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
 @Slf4j
 public class TripService {
 
@@ -36,19 +35,21 @@ public class TripService {
     private final DriverServiceClient driverServiceClient;
     private final TrackingWebSocketHandler trackingWebSocketHandler;
 
-    public Mono<Trip> createTripFromEvent(TripMatchedEvent event) {
-        log.info("배차 완료 이벤트 수신. Trip ID: {}, User ID: {}, Driver ID: {}",
-                event.tripId(), event.userId(), event.driverId());
+    private final StringRedisTemplate redisTemplate;
+    private static final String DRIVER_TRIP_KEY_PREFIX = "driver:trip:";
 
-        Mono<String> originAddressMono = naverMapsClient.reverseGeocode(
+    public Mono<Trip> createTripFromEvent(TripMatchedEvent event) {
+        log.info("배차 완료 이벤트 수신. Trip ID: {}", event.tripId());
+
+        Mono<String> originMono = naverMapsClient.reverseGeocode(
                 event.origin().longitude(), event.origin().latitude());
-        Mono<String> destinationAddressMono = naverMapsClient.reverseGeocode(
+        Mono<String> destMono = naverMapsClient.reverseGeocode(
                 event.destination().longitude(), event.destination().latitude());
 
-        return Mono.zip(originAddressMono, destinationAddressMono)
-                   .map(addressPair -> {
-                       String originAddress = addressPair.getT1();
-                       String destinationAddress = addressPair.getT2();
+        return Mono.zip(originMono, destMono)
+                   .flatMap(tuple -> {
+                       String originAddress = tuple.getT1();
+                       String destinationAddress = tuple.getT2();
 
                        Trip trip = Trip.builder()
                                        .tripId(event.tripId())
@@ -59,123 +60,111 @@ public class TripService {
                                        .matchedAt(event.matchedAt())
                                        .build();
 
-                       return tripRepository.save(trip);
-                   })
-                   .doOnSuccess(trip -> log.info("새로운 여정 생성 완료. DB ID: {}", event.tripId()));
+                       return Mono.fromCallable(() -> tripRepository.save(trip))
+                                  .subscribeOn(Schedulers.boundedElastic())
+                                  .doOnSuccess(savedTrip -> {
+                                      String key = DRIVER_TRIP_KEY_PREFIX + event.driverId();
+                                      redisTemplate.opsForValue().set(key, savedTrip.getTripId(), 24, TimeUnit.HOURS);
+                                      log.info("새로운 여정 생성 및 Redis 캐싱 완료. DB ID: {}", savedTrip.getTripId());
+                                  });
+                   });
     }
 
+    @Transactional
     public void updateTripFare(PaymentCompletedEvent event) {
-        log.info("결제 완료 이벤트 수신. Trip ID: {}, Fare: {}", event.tripId(), event.fare());
-
         tripRepository.findByTripId(event.tripId()).ifPresentOrElse(
                 trip -> {
                     trip.updateFare(event.fare());
-                    log.info("여정 요금 업데이트 완료. DB ID: {}", trip.getTripId());
+                    log.info("여정 요금 업데이트 완료: {}", trip.getTripId());
                 },
-                () -> {
-                    log.error("결제 완료 이벤트를 처리할 여정을 찾지 못했습니다. Trip ID: {}", event.tripId());
-                }
+                () -> log.error("여정 미발견: {}", event.tripId())
         );
     }
 
+    @Transactional
     public void driverArrived(String tripId) {
-        log.info("기사 도착 처리 시작. Trip ID: {}", tripId);
-
-        Trip trip = tripRepository.findByTripId(tripId)
-                                  .orElseThrow(() -> new TripNotFoundException("해당 tripId의 여정을 찾을 수 없습니다: " + tripId));
-
+        Trip trip = getTripOrThrow(tripId);
         trip.arrive();
-
-        DriverArrivedEvent event = new DriverArrivedEvent(trip.getTripId(), trip.getUserId());
-        kafkaProducer.sendDriverArrivedEvent(event);
-
-        log.info("기사 도착 처리 완료. Trip DB ID: {}", trip.getId());
+        kafkaProducer.sendDriverArrivedEvent(new DriverArrivedEvent(trip.getTripId(), trip.getUserId()));
+        log.info("기사 도착 처리 완료: {}", tripId);
     }
 
+    @Transactional
     public void startTrip(String tripId) {
-        log.info("운행 시작 처리 시작. Trip ID: {}", tripId);
-
-        Trip trip = tripRepository.findByTripId(tripId)
-                                  .orElseThrow(() -> new TripNotFoundException("해당 tripId의 여정을 찾을 수 없습니다: " + tripId));
-
+        Trip trip = getTripOrThrow(tripId);
         trip.start();
-
-        log.info("운행 시작 처리 완료. Trip DB ID: {}", trip.getId());
+        log.info("운행 시작 처리 완료: {}", tripId);
     }
 
+    @Transactional
     public void completeTrip(String tripId, CompleteTripRequest request) {
-        log.info("운행 종료 처리 시작. Trip ID: {}", tripId);
-
-        Trip trip = tripRepository.findByTripId(tripId)
-                                  .orElseThrow(() -> new TripNotFoundException("해당 tripId의 여정을 찾을 수 없습니다: " + tripId));
-
+        Trip trip = getTripOrThrow(tripId);
         LocalDateTime endedAt = trip.complete();
 
         TripCompletedEvent event = new TripCompletedEvent(
-                trip.getTripId(),
-                trip.getUserId(),
-                request.distanceMeters(),
-                request.durationSeconds(),
-                endedAt
+                trip.getTripId(), trip.getUserId(),
+                request.distanceMeters(), request.durationSeconds(), endedAt
         );
         kafkaProducer.sendTripCompletedEvent(event);
 
-        log.info("운행 종료 처리 완료. Trip DB ID: {}", trip.getId());
+        redisTemplate.delete(DRIVER_TRIP_KEY_PREFIX + trip.getDriverId());
+
+        log.info("운행 종료 처리 완료: {}", tripId);
     }
 
+    @Transactional
     public void cancelTrip(String tripId, CancelTripRequest request) {
-        log.info("여정 취소 처리 시작. Trip ID: {}, Canceled by: {}", tripId, request.canceledBy());
-
-        Trip trip = tripRepository.findByTripId(tripId)
-                                  .orElseThrow(() -> new TripNotFoundException("해당 tripId의 여정을 찾을 수 없습니다: " + tripId));
-
+        Trip trip = getTripOrThrow(tripId);
         trip.cancel();
 
         TripCanceledEvent event = new TripCanceledEvent(
-                trip.getTripId(),
-                trip.getDriverId(),
-                request.canceledBy()
+                trip.getTripId(), trip.getDriverId(), request.canceledBy()
         );
         kafkaProducer.sendTripCanceledEvent(event);
 
-        log.info("여정 취소 처리 완료. Trip DB ID: {}", trip.getId());
+        redisTemplate.delete(DRIVER_TRIP_KEY_PREFIX + trip.getDriverId());
+
+        log.info("여정 취소 처리 완료: {}", tripId);
     }
 
+    @Transactional(readOnly = true)
     public Mono<TripDetailsResponse> getTripDetails(String tripId) {
-        return Mono.fromCallable(() -> tripRepository.findByTripId(tripId)
-                                                     .orElseThrow(() -> new TripNotFoundException("해당 tripId의 여정을 찾을 수 없습니다: " + tripId)))
-                   .subscribeOn(Schedulers.boundedElastic()) // DB 조회는 별도 스레드에서
+        return Mono.fromCallable(() -> getTripOrThrow(tripId))
+                   .subscribeOn(Schedulers.boundedElastic())
                    .flatMap(trip -> {
-                       // 2. 사용자 정보와 기사 정보를 병렬로 조회
-                       Mono<UserServiceClient.InternalUserInfo> userInfoMono = userServiceClient.getUserInfo(trip.getUserId());
-                       Mono<DriverServiceClient.InternalDriverInfo> driverInfoMono = driverServiceClient.getDriverInfo(trip.getDriverId());
+                       Mono<UserServiceClient.InternalUserInfo> userInfoMono =
+                               userServiceClient.getUserInfo(trip.getUserId());
+                       Mono<DriverServiceClient.InternalDriverInfo> driverInfoMono =
+                               driverServiceClient.getDriverInfo(trip.getDriverId());
 
-                       // 3. 모든 정보가 도착하면 최종 DTO로 조합
                        return Mono.zip(userInfoMono, driverInfoMono)
                                   .map(tuple -> TripDetailsResponse.of(trip, tuple.getT1(), tuple.getT2()));
                    });
     }
 
+    @Transactional
     public void revertTripCompletion(PaymentFailedEvent event) {
-        log.warn("결제 실패로 인한 보상 트랜잭션 시작. Trip ID: {}", event.tripId());
-
         tripRepository.findByTripId(event.tripId()).ifPresentOrElse(
                 trip -> {
                     trip.revertCompletion();
-                    log.info("여정 상태 롤백 완료. Trip DB ID: {}. New Status: {}", trip.getId(), trip.getStatus());
+                    log.info("여정 상태 롤백 완료: {}", trip.getId());
                 },
-                () -> log.error("보상 트랜잭션을 처리할 여정을 찾지 못했습니다. Trip ID: {}", event.tripId())
+                () -> log.error("보상 트랜잭션 실패 (여정 미발견): {}", event.tripId())
         );
     }
 
     public void forwardDriverLocationToPassenger(DriverLocationUpdatedEvent event) {
-        List<TripStatus> activeStatuses = List.of(TripStatus.MATCHED, TripStatus.ARRIVED, TripStatus.IN_PROGRESS);
+        String key = DRIVER_TRIP_KEY_PREFIX + event.driverId();
 
-        tripRepository.findFirstByDriverIdAndStatusIn(event.driverId(), activeStatuses)
-                      .ifPresent(trip -> {
-                          log.debug("기사 위치 정보 전달. Trip ID: {}", trip.getTripId());
-                          trackingWebSocketHandler.sendLocationUpdate(trip.getTripId(), event);
-                      });
+        String currentTripId = redisTemplate.opsForValue().get(key);
+
+        if (currentTripId != null) {
+            trackingWebSocketHandler.sendLocationUpdate(currentTripId, event);
+        }
     }
 
+    private Trip getTripOrThrow(String tripId) {
+        return tripRepository.findByTripId(tripId)
+                             .orElseThrow(() -> new TripNotFoundException("해당 tripId의 여정을 찾을 수 없습니다: " + tripId));
+    }
 }

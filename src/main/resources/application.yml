@@ -9,10 +9,14 @@ spring:
     driverClassName: com.mysql.cj.jdbc.Driver
     username:
     password:
-
   jpa:
     hibernate:
       ddl-auto: update
+
+  data:
+    redis:
+      host:
+      port:
 
   kafka:
     bootstrap-servers: 192.168.1.100:9092
