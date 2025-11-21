@@ -14,6 +14,7 @@ import com.example.trip_service.kafka.dto.*;
 import com.example.trip_service.repository.TripRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,7 +64,14 @@ public class TripService {
                                        .matchedAt(event.matchedAt())
                                        .build();
 
-                       return Mono.fromCallable(() -> tripRepository.save(trip))
+                       return Mono.fromCallable(() -> {
+                                      try {
+                                          return tripRepository.save(trip);
+                                      } catch (DataIntegrityViolationException e) {
+                                          log.warn("이미 존재하는 Trip ID 입니다. (중복 이벤트 무시): {}", event.tripId());
+                                          return tripRepository.findByTripId(event.tripId()).orElse(trip);
+                                      }
+                                  })
                                   .subscribeOn(Schedulers.boundedElastic())
                                   .doOnSuccess(savedTrip -> {
                                       String key = DRIVER_TRIP_KEY_PREFIX + event.driverId();
