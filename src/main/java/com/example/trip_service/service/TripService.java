@@ -15,19 +15,21 @@ import com.example.trip_service.repository.TripRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class TripService {
+    private static final String DRIVER_TRIP_KEY_PREFIX = "driver:trip:";
 
     private final TripRepository tripRepository;
     private final NaverMapsClient naverMapsClient;
@@ -35,9 +37,8 @@ public class TripService {
     private final UserServiceClient userServiceClient;
     private final DriverServiceClient driverServiceClient;
     private final TrackingWebSocketHandler trackingWebSocketHandler;
-
+    private final ReactiveRedisTemplate<String, String> reactiveRedisTemplate;
     private final StringRedisTemplate redisTemplate;
-    private static final String DRIVER_TRIP_KEY_PREFIX = "driver:trip:";
 
     public Mono<Trip> createTripFromEvent(TripMatchedEvent event) {
         log.info("배차 완료 이벤트 수신. Trip ID: {}", event.tripId());
@@ -68,15 +69,17 @@ public class TripService {
                                       try {
                                           return tripRepository.save(trip);
                                       } catch (DataIntegrityViolationException e) {
-                                          log.warn("이미 존재하는 Trip ID 입니다. (중복 이벤트 무시): {}", event.tripId());
+                                          log.warn("중복 Trip ID 감지 (무시): {}", event.tripId());
                                           return tripRepository.findByTripId(event.tripId()).orElse(trip);
                                       }
                                   })
                                   .subscribeOn(Schedulers.boundedElastic())
-                                  .doOnSuccess(savedTrip -> {
+                                  .flatMap(savedTrip -> {
                                       String key = DRIVER_TRIP_KEY_PREFIX + event.driverId();
-                                      redisTemplate.opsForValue().set(key, savedTrip.getTripId(), 24, TimeUnit.HOURS);
-                                      log.info("새로운 여정 생성 및 Redis 캐싱 완료. DB ID: {}", savedTrip.getTripId());
+                                      return reactiveRedisTemplate.opsForValue()
+                                                                  .set(key, savedTrip.getTripId(), Duration.ofHours(3))
+                                                                  .doOnSuccess(v -> log.info("Redis 매핑 저장 완료 . Driver: {}", event.driverId()))
+                                                                  .thenReturn(savedTrip);
                                   });
                    });
     }
@@ -84,10 +87,7 @@ public class TripService {
     @Transactional
     public void updateTripFare(PaymentCompletedEvent event) {
         tripRepository.findByTripId(event.tripId()).ifPresentOrElse(
-                trip -> {
-                    trip.updateFare(event.fare());
-                    log.info("여정 요금 업데이트 완료: {}", trip.getTripId());
-                },
+                trip -> trip.updateFare(event.fare()),
                 () -> log.error("여정 미발견: {}", event.tripId())
         );
     }
@@ -112,13 +112,18 @@ public class TripService {
         Trip trip = getTripOrThrow(tripId);
         LocalDateTime endedAt = trip.complete();
 
+        // Kafka 이벤트 발행 (GeospatialService가 이걸 보고 기사 앱 주기를 10초로 변경함)
         TripCompletedEvent event = new TripCompletedEvent(
                 trip.getTripId(), trip.getUserId(), trip.getDriverId(),
                 request.distanceMeters(), request.durationSeconds(), endedAt
         );
         kafkaProducer.sendTripCompletedEvent(event);
 
-        redisTemplate.delete(DRIVER_TRIP_KEY_PREFIX + trip.getDriverId());
+        try {
+            redisTemplate.delete(DRIVER_TRIP_KEY_PREFIX + trip.getDriverId());
+        } catch (Exception e) {
+            log.error("운행 종료 후 Redis 삭제 실패 (TTL 만료 예정). Driver: {}", trip.getDriverId(), e);
+        }
 
         log.info("운행 종료 처리 완료: {}", tripId);
     }
@@ -128,12 +133,17 @@ public class TripService {
         Trip trip = getTripOrThrow(tripId);
         trip.cancel();
 
+        // Kafka 이벤트 발행 (GeospatialService가 이걸 보고 기사 앱 주기를 10초로 변경함)
         TripCanceledEvent event = new TripCanceledEvent(
                 trip.getTripId(), trip.getDriverId(), request.canceledBy()
         );
         kafkaProducer.sendTripCanceledEvent(event);
 
-        redisTemplate.delete(DRIVER_TRIP_KEY_PREFIX + trip.getDriverId());
+        try {
+            redisTemplate.delete(DRIVER_TRIP_KEY_PREFIX + trip.getDriverId());
+        } catch (Exception e) {
+            log.error("여정 취소 후 Redis 삭제 실패. Driver: {}", trip.getDriverId(), e);
+        }
 
         log.info("여정 취소 처리 완료: {}", tripId);
     }
@@ -143,12 +153,9 @@ public class TripService {
         return Mono.fromCallable(() -> getTripOrThrow(tripId))
                    .subscribeOn(Schedulers.boundedElastic())
                    .flatMap(trip -> {
-                       Mono<UserServiceClient.InternalUserInfo> userInfoMono =
-                               userServiceClient.getUserInfo(trip.getUserId());
-                       Mono<DriverServiceClient.InternalDriverInfo> driverInfoMono =
-                               driverServiceClient.getDriverInfo(trip.getDriverId());
-
-                       return Mono.zip(userInfoMono, driverInfoMono)
+                       Mono<UserServiceClient.InternalUserInfo> userInfo = userServiceClient.getUserInfo(trip.getUserId());
+                       Mono<DriverServiceClient.InternalDriverInfo> driverInfo = driverServiceClient.getDriverInfo(trip.getDriverId());
+                       return Mono.zip(userInfo, driverInfo)
                                   .map(tuple -> TripDetailsResponse.of(trip, tuple.getT1(), tuple.getT2()));
                    });
     }
@@ -158,9 +165,9 @@ public class TripService {
         tripRepository.findByTripId(event.tripId()).ifPresentOrElse(
                 trip -> {
                     trip.revertCompletion();
-                    log.info("여정 상태 롤백 완료: {}", trip.getId());
+                    log.info("보상 트랜잭션(롤백) 완료: {}", trip.getId());
                 },
-                () -> log.error("보상 트랜잭션 실패 (여정 미발견): {}", event.tripId())
+                () -> log.error("보상 트랜잭션 대상 미발견: {}", event.tripId())
         );
     }
 
@@ -170,12 +177,13 @@ public class TripService {
         String currentTripId = redisTemplate.opsForValue().get(key);
 
         if (currentTripId != null) {
+            // 승객용 웹소켓으로 전송
             trackingWebSocketHandler.sendLocationUpdate(currentTripId, event);
         }
     }
 
     private Trip getTripOrThrow(String tripId) {
         return tripRepository.findByTripId(tripId)
-                             .orElseThrow(() -> new TripNotFoundException("해당 tripId의 여정을 찾을 수 없습니다: " + tripId));
+                             .orElseThrow(() -> new TripNotFoundException("여정 정보 없음: " + tripId));
     }
 }
