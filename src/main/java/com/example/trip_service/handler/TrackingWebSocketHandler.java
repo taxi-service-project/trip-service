@@ -10,7 +10,6 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,7 +26,7 @@ public class TrackingWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionEstablished(WebSocketSession session) {
         String tripId = extractTripId(session);
         sessions.put(tripId, session);
-        log.info("승객 위치 추적 연결됨. Trip ID: {}, Session ID: {}", tripId, session.getId());
+        log.info("승객 위치 추적 연결됨. Trip ID: {}", tripId);
     }
 
     public void sendLocationUpdate(String tripId, Object locationData) {
@@ -37,7 +36,7 @@ public class TrackingWebSocketHandler extends TextWebSocketHandler {
                 String messagePayload = objectMapper.writeValueAsString(locationData);
                 session.sendMessage(new TextMessage(messagePayload));
             } catch (IOException e) {
-                log.error("위치 정보 전송 실패. Trip ID: {}", tripId, e);
+                log.error("위치 전송 실패. Trip ID: {}", tripId, e);
             }
         }
     }
@@ -46,12 +45,10 @@ public class TrackingWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         String tripId = extractTripId(session);
         sessions.remove(tripId);
-        log.info("승객 위치 추적 연결 끊김. Trip ID: {}, Status: {}", tripId, status);
     }
 
     private String extractTripId(WebSocketSession session) {
-        URI uri = Objects.requireNonNull(session.getUri());
-        String[] pathSegments = uri.getPath().split("/");
-        return pathSegments[pathSegments.length - 1];
+        String path = Objects.requireNonNull(session.getUri()).getPath();
+        return path.substring(path.lastIndexOf('/') + 1);
     }
 }

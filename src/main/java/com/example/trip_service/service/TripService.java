@@ -113,7 +113,7 @@ public class TripService {
         LocalDateTime endedAt = trip.complete();
 
         TripCompletedEvent event = new TripCompletedEvent(
-                trip.getTripId(), trip.getUserId(),
+                trip.getTripId(), trip.getUserId(), trip.getDriverId(),
                 request.distanceMeters(), request.durationSeconds(), endedAt
         );
         kafkaProducer.sendTripCompletedEvent(event);
