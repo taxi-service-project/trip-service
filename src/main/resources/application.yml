@@ -56,14 +56,14 @@ resilience4j:
         minimum-number-of-calls: 10
         sliding-window-type: count-based
         sliding-window-size: 20
-        wait-duration-in-open-state: 30s
+        wait-duration-in-open-state: 15s
         permitted-number-of-calls-in-half-open-state: 5
       user-service:
         failure-rate-threshold: 50
         minimum-number-of-calls: 10
         sliding-window-type: count-based
         sliding-window-size: 20
-        wait-duration-in-open-state: 30s
+        wait-duration-in-open-state: 15s
         permitted-number-of-calls-in-half-open-state: 5
       naver-service:
         failure-rate-threshold: 50
@@ -72,6 +72,17 @@ resilience4j:
         sliding-window-size: 20
         wait-duration-in-open-state: 30s
         permitted-number-of-calls-in-half-open-state: 5
+  timelimiter:
+    instances:
+      driver-service:
+        timeout-duration: 3s
+        cancel-running-future: true
+      user-service:
+        timeout-duration: 3s
+        cancel-running-future: true
+      naver-service:
+        timeout-duration: 5s
+        cancel-running-future: true
 
 naver:
   api:
