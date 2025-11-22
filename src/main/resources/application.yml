@@ -35,8 +35,14 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
+        spring.json.use.type.headers: true
         spring.json.trusted.packages: "*"
         max.poll.records: 500
+        spring.json.type.mapping: >
+          com.example.matching_service.dto.kafka.TripMatchedEvent:com.example.trip_service.kafka.dto.TripMatchedEvent,
+          com.example.payment_service.kafka.dto.PaymentCompletedEvent:com.example.trip_service.kafka.dto.PaymentCompletedEvent,
+          com.example.payment_service.kafka.dto.PaymentFailedEvent:com.example.trip_service.kafka.dto.PaymentFailedEvent,
+          com.example.geospatial_service.kafka.dto.DriverLocationUpdatedEvent:com.example.trip_service.kafka.dto.DriverLocationUpdatedEvent
     listener:
       ack-mode: RECORD
 
