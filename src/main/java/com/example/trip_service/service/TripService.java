@@ -85,14 +85,6 @@ public class TripService {
     }
 
     @Transactional
-    public void updateTripFare(PaymentCompletedEvent event) {
-        tripRepository.findByTripId(event.tripId()).ifPresentOrElse(
-                trip -> trip.updateFare(event.fare()),
-                () -> log.error("여정 미발견: {}", event.tripId())
-        );
-    }
-
-    @Transactional
     public void driverArrived(String tripId) {
         Trip trip = getTripOrThrow(tripId);
         trip.arrive();
@@ -107,12 +99,12 @@ public class TripService {
         log.info("운행 시작 처리 완료: {}", tripId);
     }
 
+    // 기사님이 [운행 종료] 버튼 누름
     @Transactional
     public void completeTrip(String tripId, CompleteTripRequest request) {
         Trip trip = getTripOrThrow(tripId);
         LocalDateTime endedAt = trip.complete();
 
-        // Kafka 이벤트 발행 (GeospatialService가 이걸 보고 기사 앱 주기를 10초로 변경함)
         TripCompletedEvent event = new TripCompletedEvent(
                 trip.getTripId(), trip.getUserId(), trip.getDriverId(),
                 request.distanceMeters(), request.durationSeconds(), endedAt
@@ -122,10 +114,23 @@ public class TripService {
         try {
             redisTemplate.delete(DRIVER_TRIP_KEY_PREFIX + trip.getDriverId());
         } catch (Exception e) {
-            log.error("운행 종료 후 Redis 삭제 실패 (TTL 만료 예정). Driver: {}", trip.getDriverId(), e);
+            log.error("...", e);
         }
 
-        log.info("운행 종료 처리 완료: {}", tripId);
+        log.info("운행 종료 요청 처리 완료 (결제 대기 중): {}", tripId);
+    }
+
+    // PaymentService가 "결제 성공" 이벤트 보냄 -> Consumer가 호출
+    @Transactional
+    public void handlePaymentSuccess(PaymentCompletedEvent event) {
+        tripRepository.findByTripId(event.tripId()).ifPresentOrElse(
+                trip -> {
+                    trip.confirmPayment();
+                    trip.updateFare(event.fare());
+                    log.info("최종 여정 완료 (결제 성공): {}", trip.getTripId());
+                },
+                () -> log.error("여정 미발견: {}", event.tripId())
+        );
     }
 
     @Transactional

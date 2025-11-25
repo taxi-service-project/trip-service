@@ -82,9 +82,21 @@ public class Trip {
         if (this.status != TripStatus.IN_PROGRESS) {
             throw new TripStatusConflictException("운행을 종료할 수 없는 상태입니다. 현재 상태: " + this.status);
         }
-        this.status = TripStatus.COMPLETED;
+        this.status = TripStatus.PAYMENT_PENDING;
         this.endedAt = LocalDateTime.now();
         return this.endedAt;
+    }
+
+    public void confirmPayment() {
+        if (this.status == TripStatus.COMPLETED) {
+            return;
+        }
+
+        if (this.status != TripStatus.PAYMENT_PENDING) {
+            throw new IllegalStateException("결제 완료 처리를 할 수 없는 상태입니다: " + this.status);
+        }
+
+        this.status = TripStatus.COMPLETED;
     }
 
     public void cancel() {
@@ -95,8 +107,14 @@ public class Trip {
     }
 
     public void revertCompletion() {
-        if (this.status == TripStatus.COMPLETED) {
-            this.status = TripStatus.PAYMENT_FAILED;
+        if (this.status == TripStatus.PAYMENT_FAILED) {
+            return;
         }
+
+        if (this.status != TripStatus.PAYMENT_PENDING) {
+            throw new IllegalStateException("결제 실패 처리를 할 수 없는 상태입니다: " + this.status);
+        }
+
+        this.status = TripStatus.PAYMENT_FAILED;
     }
 }

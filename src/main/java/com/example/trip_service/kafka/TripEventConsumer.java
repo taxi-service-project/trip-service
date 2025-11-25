@@ -25,7 +25,7 @@ public class TripEventConsumer {
     @KafkaHandler
     public void handlePaymentCompletedEvent(PaymentCompletedEvent event) {
         log.info("Consumer: 결제 완료 이벤트 수신 - TripID: {}", event.tripId());
-        tripService.updateTripFare(event);
+        tripService.handlePaymentSuccess(event);
     }
 
     @KafkaHandler
