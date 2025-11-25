@@ -27,7 +27,7 @@
 
 ### 🟢 Happy Path (정상 흐름)
 1.  **운행 종료 요청** (`PUT /complete`) 수신.
-2.  **Trip Service:** DB 상태를 `PENDING_PAYMENT`로 변경하고 `TripCompletedEvent` 발행.
+2.  **Trip Service:** DB 상태를 `PAYMENT_PENDING`로 변경하고 `TripCompletedEvent` 발행.
 3.  **Payment Service:** 이벤트 수신 후 결제 승인 시도 → 성공 시 `PaymentCompletedEvent` 발행.
 4.  **Trip Service:** 결제 완료 이벤트 수신 후 최종 상태 `COMPLETED` 확정.
 
