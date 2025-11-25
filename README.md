@@ -40,3 +40,9 @@
 ## 🚀 Key Improvements
 * **Hybrid Architecture:** 외부 API 호출 구간은 **WebFlux**로 병렬 처리, 트랜잭션 구간은 **Blocking(JPA)**으로 처리하여 성능과 안정성 동시 확보.
 * **Fault Tolerance:** Kafka `acks=all` 및 Consumer `RECORD`로 데이터 유실 원천 차단.
+
+
+----------
+
+## 아키텍쳐
+<img width="2324" height="1686" alt="Image" src="https://github.com/user-attachments/assets/81a25ff9-ee02-4996-80d3-f9217c3b7750" />
