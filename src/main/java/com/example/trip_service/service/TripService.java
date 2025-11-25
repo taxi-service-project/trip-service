@@ -114,7 +114,8 @@ public class TripService {
         try {
             redisTemplate.delete(DRIVER_TRIP_KEY_PREFIX + trip.getDriverId());
         } catch (Exception e) {
-            log.error("...", e);
+            log.error("운행 종료 후 Redis 키 삭제 실패. Driver ID: {}",
+                    trip.getDriverId(), e);
         }
 
         log.info("운행 종료 요청 처리 완료 (결제 대기 중): {}", tripId);
