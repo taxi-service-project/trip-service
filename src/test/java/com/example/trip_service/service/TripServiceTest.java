@@ -21,6 +21,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -29,6 +30,8 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,6 +50,8 @@ class TripServiceTest {
     @Mock
     private DriverServiceClient driverServiceClient;
 
+    @Mock
+    private StringRedisTemplate redisTemplate;
 
     @Test
     @DisplayName("기사 도착 처리 성공: 상태가 MATCHED에서 ARRIVED로 변경되고 이벤트가 발행된다")
@@ -140,25 +145,33 @@ class TripServiceTest {
     }
 
     @Test
-    @DisplayName("운행 종료 처리 성공: 상태가 COMPLETED로 변경되고 이벤트가 발행된다")
+    @DisplayName("운행 종료 처리 성공: 상태가 PAYMENT_PENDING으로 변경되고 이벤트가 발행된다")
     void completeTrip_Success() {
         // given
         String tripId = "test-trip-uuid-1";
         String userId = "user-uuid-101";
+        String driverId = "driver-uuid-202";
 
         CompleteTripRequest request = new CompleteTripRequest(5000, 1200);
-        Trip inProgressTrip = Trip.builder().tripId(tripId).userId(userId).build();
+
+        Trip inProgressTrip = Trip.builder()
+                                  .tripId(tripId)
+                                  .userId(userId)
+                                  .driverId(driverId)
+                                  .build();
+
         ReflectionTestUtils.setField(inProgressTrip, "status", TripStatus.IN_PROGRESS);
 
-        when(tripRepository.findByTripId(tripId)).thenReturn(Optional.of(inProgressTrip));
+        given(tripRepository.findByTripId(tripId)).willReturn(Optional.of(inProgressTrip));
 
         // when
         tripService.completeTrip(tripId, request);
 
         // then
-        assertThat(inProgressTrip.getStatus()).isEqualTo(TripStatus.COMPLETED);
+        assertThat(inProgressTrip.getStatus()).isEqualTo(TripStatus.PAYMENT_PENDING);
         assertThat(inProgressTrip.getEndedAt()).isNotNull();
 
+        // Kafka 이벤트 발행 검증
         ArgumentCaptor<TripCompletedEvent> eventCaptor = ArgumentCaptor.forClass(TripCompletedEvent.class);
         verify(kafkaProducer).sendTripCompletedEvent(eventCaptor.capture());
 
@@ -166,6 +179,8 @@ class TripServiceTest {
         assertThat(capturedEvent.tripId()).isEqualTo(tripId);
         assertThat(capturedEvent.userId()).isEqualTo(userId);
         assertThat(capturedEvent.distanceMeters()).isEqualTo(5000);
+
+        verify(redisTemplate).delete(anyString());
     }
 
     @Test
