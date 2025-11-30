@@ -23,9 +23,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,7 +55,7 @@ class TripServiceTest {
     @Test
     @DisplayName("기사 도착 처리 성공: 상태가 MATCHED에서 ARRIVED로 변경되고 이벤트가 발행된다")
     void driverArrived_Success() {
-        // given: 초기 조건 설정
+        // given
         String tripId = "test-trip-id";
         String userId = "user-uuid-101";
 
@@ -229,34 +228,42 @@ class TripServiceTest {
     }
 
     @Test
-    @DisplayName("여정 상세 정보 조회 성공")
+    @DisplayName("여정 상세 정보 조회 성공 - 외부 호출 없이 DB 스냅샷 데이터 반환")
     void getTripDetails_Success() {
         // given
         String tripId = "test-trip-uuid-3";
-        String userId = "user-uuid-101";
-        String driverId = "driver-uuid-201";
 
-        Trip trip = Trip.builder().tripId(tripId).userId(userId).driverId(driverId).build();
+        Trip trip = Trip.builder()
+                        .tripId(tripId)
+                        .userId("user-101")
+                        .driverId("driver-201")
+                        .originAddress("서울 강남구")
+                        .destinationAddress("서울 서초구")
+                        .matchedAt(LocalDateTime.now())
+                        .userName("홍길동")
+                        .driverName("김기사")
+                        .vehicleModel("K5")
+                        .licensePlate("12가3456")
+                        .build();
 
-        var userInfo = new UserServiceClient.InternalUserInfo(userId, "홍길동");
-        var driverInfo = new DriverServiceClient.InternalDriverInfo(driverId, "김기사", 4.8,
-                new DriverServiceClient.InternalDriverInfo.VehicleInfo("12가3456", "K5"));
+        ReflectionTestUtils.setField(trip, "status", TripStatus.IN_PROGRESS);
+        ReflectionTestUtils.setField(trip, "fare", 5000);
 
         when(tripRepository.findByTripId(tripId)).thenReturn(Optional.of(trip));
-        when(userServiceClient.getUserInfo(userId)).thenReturn(Mono.just(userInfo));
-        when(driverServiceClient.getDriverInfo(driverId)).thenReturn(Mono.just(driverInfo));
 
         // when
-        Mono<TripDetailsResponse> resultMono = tripService.getTripDetails(tripId);
+        TripDetailsResponse result = tripService.getTripDetails(tripId);
 
         // then
-        StepVerifier.create(resultMono)
-                    .assertNext(details -> {
-                        assertThat(details.tripId()).isEqualTo(tripId);
-                        assertThat(details.user().userId()).isEqualTo(userId);
-                        assertThat(details.driver().driverId()).isEqualTo(driverId);
-                        assertThat(details.driver().name()).isEqualTo("김기사");
-                    })
-                    .verifyComplete();
+        assertThat(result).isNotNull();
+        assertThat(result.tripId()).isEqualTo(tripId);
+
+        assertThat(result.status()).isEqualTo(TripStatus.IN_PROGRESS);
+        assertThat(result.fare()).isEqualTo(5000);
+
+        assertThat(result.user().name()).isEqualTo("홍길동");
+        assertThat(result.driver().name()).isEqualTo("김기사");
+        assertThat(result.driver().model()).isEqualTo("K5");
+
     }
 }

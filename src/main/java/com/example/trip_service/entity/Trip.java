@@ -48,8 +48,21 @@ public class Trip {
     @Column(name = "ended_at")
     private LocalDateTime endedAt;
 
+    @Column(name = "driver_name")
+    private String driverName;
+
+    @Column(name = "vehicle_model")
+    private String vehicleModel;
+
+    @Column(name = "license_plate")
+    private String licensePlate;
+
+    @Column(name = "user_name")
+    private String userName;
+
     @Builder
-    public Trip(String tripId, String userId, String driverId, String originAddress, String destinationAddress, LocalDateTime matchedAt) {
+    public Trip(String tripId, String userId, String driverId, String originAddress, String destinationAddress, LocalDateTime matchedAt,
+                String driverName, String vehicleModel, String licensePlate, String userName) {
         this.tripId = tripId;
         this.userId = userId;
         this.driverId = driverId;
@@ -57,6 +70,10 @@ public class Trip {
         this.destinationAddress = destinationAddress;
         this.matchedAt = matchedAt;
         this.status = TripStatus.MATCHED;
+        this.driverName = driverName;
+        this.vehicleModel = vehicleModel;
+        this.licensePlate = licensePlate;
+        this.userName = userName;
     }
 
     public void updateFare(Integer fare) {

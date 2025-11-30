@@ -15,15 +15,12 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
-import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -141,6 +138,7 @@ class TripControllerTest {
     void getTripDetails_Success() throws Exception {
         // Given
         String tripId = "trip-123";
+        String userId = "u1";
         LocalDateTime now = LocalDateTime.now();
 
         TripDetailsResponse response = TripDetailsResponse.builder()
@@ -153,24 +151,20 @@ class TripControllerTest {
                                                           .startedAt(now.minusMinutes(25))
                                                           .endedAt(now)
                                                           .user(new UserInfo("u1", "홍길동"))
-                                                          .driver(new DriverInfo("d1", "김기사", 4.9, "12가3456", "쏘나타"))
+                                                          .driver(new DriverInfo("d1", "김기사", "12가3456", "쏘나타"))
                                                           .build();
 
-        // Service는 Mono를 반환함
-        given(tripService.getTripDetails(tripId)).willReturn(Mono.just(response));
+        given(tripService.getTripDetails(tripId)).willReturn(response);
 
-        // When 1: 비동기 요청 시작
-        MvcResult mvcResult = mockMvc.perform(get("/api/trips/{tripId}", tripId))
-                                     .andExpect(request().asyncStarted())
-                                     .andReturn();
 
-        // When 2 & Then: 비동기 처리 완료 후 결과 검증
-        mockMvc.perform(asyncDispatch(mvcResult))
+        mockMvc.perform(get("/api/trips/{tripId}", tripId)
+                       .header("X-User-Id", userId)
+                       .contentType(MediaType.APPLICATION_JSON))
                .andExpect(status().isOk())
                .andExpect(jsonPath("$.tripId").value(tripId))
                .andExpect(jsonPath("$.status").value("COMPLETED"))
                .andExpect(jsonPath("$.originAddress").value("서울역"))
                .andExpect(jsonPath("$.user.name").value("홍길동"))
-               .andExpect(jsonPath("$.driver.ratingAvg").value(4.9));
+               .andExpect(jsonPath("$.driver.name").value("김기사"));
     }
 }

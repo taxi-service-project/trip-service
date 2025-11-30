@@ -44,7 +44,8 @@ public class TripController {
     }
 
     @GetMapping("/{tripId}")
-    public Mono<TripDetailsResponse> getTripDetails(@PathVariable String tripId) {
-        return tripService.getTripDetails(tripId);
+    public ResponseEntity<TripDetailsResponse> getTripDetails(@PathVariable String tripId) {
+        TripDetailsResponse tripDetailsResponse =  tripService.getTripDetails(tripId);
+        return ResponseEntity.ok(tripDetailsResponse);
     }
 }

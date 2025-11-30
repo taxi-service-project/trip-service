@@ -51,10 +51,18 @@ public class TripService {
                                                        event.destination().longitude(), event.destination().latitude())
                                                .onErrorReturn("목적지 주소 확인 불가");
 
-        return Mono.zip(originMono, destMono)
+        Mono<UserServiceClient.InternalUserInfo> userMono =
+                userServiceClient.getUserInfo(event.userId());
+
+        Mono<DriverServiceClient.InternalDriverInfo> driverMono =
+                driverServiceClient.getDriverInfo(event.driverId());
+
+        return Mono.zip(originMono, destMono, userMono, driverMono)
                    .flatMap(tuple -> {
                        String originAddress = tuple.getT1();
                        String destinationAddress = tuple.getT2();
+                       var userInfo = tuple.getT3();
+                       var driverInfo = tuple.getT4();
 
                        Trip trip = Trip.builder()
                                        .tripId(event.tripId())
@@ -63,6 +71,11 @@ public class TripService {
                                        .originAddress(originAddress)
                                        .destinationAddress(destinationAddress)
                                        .matchedAt(event.matchedAt())
+
+                                       .userName(userInfo.name())
+                                       .driverName(driverInfo.name())
+                                       .vehicleModel(driverInfo.vehicle().model())
+                                       .licensePlate(driverInfo.vehicle().licensePlate())
                                        .build();
 
                        return Mono.fromCallable(() -> {
@@ -74,11 +87,16 @@ public class TripService {
                                       }
                                   })
                                   .subscribeOn(Schedulers.boundedElastic())
+
                                   .flatMap(savedTrip -> {
                                       String key = DRIVER_TRIP_KEY_PREFIX + event.driverId();
                                       return reactiveRedisTemplate.opsForValue()
                                                                   .set(key, savedTrip.getTripId(), Duration.ofHours(3))
-                                                                  .doOnSuccess(v -> log.info("Redis 매핑 저장 완료 . Driver: {}", event.driverId()))
+                                                                  .doOnSuccess(v -> log.info("Redis 캐싱 완료. Driver: {}", event.driverId()))
+                                                                  .onErrorResume(e -> {
+                                                                      log.error("Redis 캐싱 실패 (서비스 영향 없음). Error: {}", e.getMessage());
+                                                                      return Mono.empty();
+                                                                  })
                                                                   .thenReturn(savedTrip);
                                   });
                    });
@@ -155,15 +173,9 @@ public class TripService {
     }
 
     @Transactional(readOnly = true)
-    public Mono<TripDetailsResponse> getTripDetails(String tripId) {
-        return Mono.fromCallable(() -> getTripOrThrow(tripId))
-                   .subscribeOn(Schedulers.boundedElastic())
-                   .flatMap(trip -> {
-                       Mono<UserServiceClient.InternalUserInfo> userInfo = userServiceClient.getUserInfo(trip.getUserId());
-                       Mono<DriverServiceClient.InternalDriverInfo> driverInfo = driverServiceClient.getDriverInfo(trip.getDriverId());
-                       return Mono.zip(userInfo, driverInfo)
-                                  .map(tuple -> TripDetailsResponse.of(trip, tuple.getT1(), tuple.getT2()));
-                   });
+    public TripDetailsResponse getTripDetails(String tripId) {
+        Trip trip = getTripOrThrow(tripId);
+        return TripDetailsResponse.fromEntity(trip);
     }
 
     @Transactional
