@@ -2,6 +2,7 @@ package com.example.trip_service.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreaker;
 import org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreakerFactory;
@@ -37,7 +38,7 @@ public class NaverMapsClient {
         record Land(String name, String number1, String number2) {}
     }
 
-    public NaverMapsClient(WebClient.Builder builder,
+    public NaverMapsClient(@Qualifier("externalWebClientBuilder") WebClient.Builder builder,
                            @Value("${naver.api.client-id}") String clientId,
                            @Value("${naver.api.client-secret}") String clientSecret,
                            ReactiveCircuitBreakerFactory cbFactory) {
