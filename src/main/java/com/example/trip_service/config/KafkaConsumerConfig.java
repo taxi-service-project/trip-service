@@ -69,6 +69,9 @@ public class KafkaConsumerConfig {
         factory.setConsumerFactory(consumerFactory);
         factory.setCommonErrorHandler(errorHandler);
         factory.setConcurrency(3);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
+        factory.getContainerProperties().setObservationEnabled(true);
+
         return factory;
     }
 
@@ -83,17 +86,18 @@ public class KafkaConsumerConfig {
         factory.setConsumerFactory(consumerFactory);
         factory.setConcurrency(1);
 
-        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
-
         DefaultErrorHandler dltErrorHandler = new DefaultErrorHandler(
-                new FixedBackOff(2000L, 3L) // 2초 간격 3번 재시도
+                (record, exception) -> {
+                    log.error("🚨 [DLT 처리 실패] DB 저장 불가. 로그만 남기고 오프셋을 넘깁니다. Payload: {}", record.value());
+                },
+                new FixedBackOff(0L, 0L)
         );
 
-        dltErrorHandler.setRetryListeners((record, ex, attempt) ->
-                log.warn("[DLT 처리 실패] 재시도 중... ({})", attempt)
-        );
+        dltErrorHandler.setAckAfterHandle(true);
 
         factory.setCommonErrorHandler(dltErrorHandler);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
+        factory.getContainerProperties().setObservationEnabled(true);
 
         return factory;
     }

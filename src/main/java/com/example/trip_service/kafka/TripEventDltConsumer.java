@@ -26,38 +26,27 @@ public class TripEventDltConsumer {
                     "driver_location_events.DLT"
             },
             groupId = "${spring.kafka.consumer.group-id}.dlt",
-            containerFactory = "dltKafkaListenerContainerFactory",
-            concurrency = "3"
+            containerFactory = "dltKafkaListenerContainerFactory"
     )
     @Transactional
     public void consumeDlt(
             @Payload String message,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String originalDltTopic,
-            @Header(value = "kafka_dlt_exception_message", required = false) String exceptionMessage,
-            Acknowledgment ack
+            @Header(value = "kafka_dlt_exception_message", required = false) String exceptionMessage
     ) {
         log.warn("[DLT 수신] 토픽: {}, 메시지: {}", originalDltTopic, message);
 
-        try {
-            if (exceptionMessage == null) {
-                exceptionMessage = "Unknown Error";
-            }
-
-            FailedEvent failedEvent = FailedEvent.builder()
-                                                 .topic(originalDltTopic)
-                                                 .payload(message)
-                                                 .errorMessage(truncate(exceptionMessage, 1000))
-                                                 .build();
-
-            failedEventRepository.save(failedEvent);
-
-            ack.acknowledge();
-
-        } catch (Exception e) {
-            log.error("🚨 [FATAL_DLT_ERROR] DB 저장 실패! 수동 복구 필요. Payload: {} | Error: {}",
-                    message, e.getMessage());
-            ack.acknowledge();
+        if (exceptionMessage == null) {
+            exceptionMessage = "Unknown Error";
         }
+
+        FailedEvent failedEvent = FailedEvent.builder()
+                                             .topic(originalDltTopic)
+                                             .payload(message)
+                                             .errorMessage(truncate(exceptionMessage, 1000))
+                                             .build();
+
+        failedEventRepository.save(failedEvent);
     }
 
     private String truncate(String str, int max) {

@@ -45,9 +45,7 @@ spring:
           com.example.payment_service.kafka.dto.PaymentCompletedEvent:com.example.trip_service.kafka.dto.PaymentCompletedEvent,
           com.example.payment_service.kafka.dto.PaymentFailedEvent:com.example.trip_service.kafka.dto.PaymentFailedEvent,
           com.example.geospatial_service.kafka.dto.DriverLocationUpdatedEvent:com.example.trip_service.kafka.dto.DriverLocationUpdatedEvent
-    listener:
-      ack-mode: RECORD
-      observation-enabled: true
+
     template:
       observation-enabled: true
 
