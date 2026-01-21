@@ -12,6 +12,8 @@ import com.example.trip_service.handler.TrackingWebSocketHandler;
 import com.example.trip_service.kafka.TripKafkaProducer;
 import com.example.trip_service.kafka.dto.*;
 import com.example.trip_service.repository.TripRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -36,9 +38,9 @@ public class TripService {
     private final TripKafkaProducer kafkaProducer;
     private final UserServiceClient userServiceClient;
     private final DriverServiceClient driverServiceClient;
-    private final TrackingWebSocketHandler trackingWebSocketHandler;
     private final ReactiveRedisTemplate<String, String> reactiveRedisTemplate;
     private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
     public Mono<Trip> createTripFromEvent(TripMatchedEvent event) {
         log.info("배차 완료 이벤트 수신. Trip ID: {}", event.tripId());
@@ -192,12 +194,19 @@ public class TripService {
     public void forwardDriverLocationToPassenger(DriverLocationUpdatedEvent event) {
         String key = DRIVER_TRIP_KEY_PREFIX + event.driverId();
 
-        String currentTripId = redisTemplate.opsForValue().get(key);
-
-        if (currentTripId != null) {
-            // 승객용 웹소켓으로 전송
-            trackingWebSocketHandler.sendLocationUpdate(currentTripId, event);
-        }
+        reactiveRedisTemplate.opsForValue().get(key)
+                             .flatMap(tripId -> {
+                                 // 방송할 채널 이름 결정 (예: trip:location:12345)
+                                 String topic = "trip:location:" + tripId;
+                                 try {
+                                     String messageJson = objectMapper.writeValueAsString(event);
+                                     return reactiveRedisTemplate.convertAndSend(topic, messageJson);
+                                 } catch (JsonProcessingException e) {
+                                     return Mono.error(e);
+                                 }
+                             })
+                             .doOnSuccess(count -> log.debug("위치 방송 완료. 수신자: {}", count))
+                             .subscribe();
     }
 
     private Trip getTripOrThrow(String tripId) {
