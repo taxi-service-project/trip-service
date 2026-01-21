@@ -8,7 +8,6 @@ import com.example.trip_service.dto.CompleteTripRequest;
 import com.example.trip_service.dto.TripDetailsResponse;
 import com.example.trip_service.entity.Trip;
 import com.example.trip_service.exception.TripNotFoundException;
-import com.example.trip_service.handler.TrackingWebSocketHandler;
 import com.example.trip_service.kafka.TripKafkaProducer;
 import com.example.trip_service.kafka.dto.*;
 import com.example.trip_service.repository.TripRepository;
