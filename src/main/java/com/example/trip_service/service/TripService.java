@@ -43,7 +43,18 @@ public class TripService {
 
     public Mono<Trip> createTripFromEvent(TripMatchedEvent event) {
         log.info("배차 완료 이벤트 수신. Trip ID: {}", event.tripId());
+        return Mono.fromCallable(() -> tripRepository.findByTripId(event.tripId()))
+                   .subscribeOn(Schedulers.boundedElastic())
+                   .flatMap(optionalTrip -> {
+                       if (optionalTrip.isPresent()) {
+                           log.info("이미 처리된 Trip ID 입니다. (중복 처리 생략): {}", event.tripId());
+                           return Mono.just(optionalTrip.get());
+                       }
+                       return processNewTrip(event);
+                   });
+    }
 
+    private Mono<Trip> processNewTrip(TripMatchedEvent event) {
         Mono<String> originMono = naverMapsClient.reverseGeocode(
                                                          event.origin().longitude(), event.origin().latitude())
                                                  .onErrorReturn("출발지 주소 확인 불가");
@@ -72,7 +83,6 @@ public class TripService {
                                        .originAddress(originAddress)
                                        .destinationAddress(destinationAddress)
                                        .matchedAt(event.matchedAt())
-
                                        .userName(userInfo.name())
                                        .driverName(driverInfo.name())
                                        .vehicleModel(driverInfo.vehicle().model())
@@ -83,19 +93,19 @@ public class TripService {
                                       try {
                                           return tripRepository.save(trip);
                                       } catch (DataIntegrityViolationException e) {
-                                          log.warn("중복 Trip ID 감지 (무시): {}", event.tripId());
+                                          // 아주 짧은 찰나에 동시 요청이 들어왔을 때를 대비한 2차 방어선
+                                          log.warn("동시성 이슈로 인한 중복 Trip ID 감지 (무시): {}", event.tripId());
                                           return tripRepository.findByTripId(event.tripId()).orElse(trip);
                                       }
                                   })
                                   .subscribeOn(Schedulers.boundedElastic())
-
                                   .flatMap(savedTrip -> {
                                       String key = DRIVER_TRIP_KEY_PREFIX + event.driverId();
                                       return reactiveRedisTemplate.opsForValue()
                                                                   .set(key, savedTrip.getTripId(), Duration.ofHours(3))
                                                                   .doOnSuccess(v -> log.info("Redis 캐싱 완료. Driver: {}", event.driverId()))
                                                                   .onErrorResume(e -> {
-                                                                      log.error("Redis 캐싱 실패 (서비스 영향 없음). Error: {}", e.getMessage());
+                                                                      log.error("Redis 캐싱 실패. Error: {}", e.getMessage());
                                                                       return Mono.empty();
                                                                   })
                                                                   .thenReturn(savedTrip);
