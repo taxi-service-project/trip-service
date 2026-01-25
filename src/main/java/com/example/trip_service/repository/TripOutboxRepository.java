@@ -1,7 +1,9 @@
 package com.example.trip_service.repository;
 
+import com.example.trip_service.entity.OutboxStatus;
 import com.example.trip_service.entity.TripOutbox;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -17,4 +19,9 @@ public interface TripOutboxRepository extends JpaRepository<TripOutbox, Long> {
             "FOR UPDATE SKIP LOCKED",
             nativeQuery = true)
     List<TripOutbox> findEventsForPublishing(@Param("limit") int limit);
+
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE TripOutbox t SET t.status = :status WHERE t.id IN :ids")
+    void updateStatus(@Param("ids") List<Long> ids, @Param("status") OutboxStatus status);
+
 }

@@ -10,8 +10,6 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
@@ -31,17 +29,22 @@ public class OutboxMessageRelay {
     private final Executor eventPublisherExecutor;
 
     @Scheduled(fixedDelay = 500)
-    @Transactional // 락 헤제를 위함
     public void publishEvents() {
-        List<TripOutbox> events = outboxRepository.findEventsForPublishing(100);
 
-        if (events.isEmpty()) return;
+        List<TripOutbox> eventsToPublish = transactionTemplate.execute(status -> {
+            List<TripOutbox> events = outboxRepository.findEventsForPublishing(100);
 
-        for (TripOutbox event : events) {
-            event.changeStatus(OutboxStatus.PUBLISHING);
-        }
+            if (events.isEmpty()) return null;
 
-        for (TripOutbox event : events) {
+            List<Long> ids = events.stream().map(TripOutbox::getId).toList();
+            outboxRepository.updateStatus(ids, OutboxStatus.PUBLISHING);
+
+            return events;
+        });
+
+        if (eventsToPublish == null || eventsToPublish.isEmpty()) return;
+
+        for (TripOutbox event : eventsToPublish) {
             CompletableFuture.runAsync(() -> sendToKafka(event), eventPublisherExecutor);
         }
     }
@@ -53,25 +56,22 @@ public class OutboxMessageRelay {
 
             future.whenComplete((result, ex) -> {
                 if (ex == null) {
-                    log.info("Kafka 발행 성공. Outbox ID: {}", event.getId());
+                    log.info("Outbox Kafka 발행 성공. Outbox ID: {}", event.getId());
                     updateStatus(event.getId(), OutboxStatus.DONE);
                 } else {
-                    log.error("Kafka 발행 실패. Outbox ID: {}, Error: {}", event.getId(), ex.getMessage());
+                    log.error("Outbox Kafka 발행 실패. Outbox ID: {}, Error: {}", event.getId(), ex.getMessage());
                     updateStatus(event.getId(), OutboxStatus.READY);
                 }
             });
 
         } catch (Exception e) {
-            log.error("Relay 내부 에러 발생", e);
+            log.error("Outbox Relay 내부 에러 발생", e);
         }
     }
 
     public void updateStatus(Long eventId, OutboxStatus status) {
-        // 비동기 스레드이므로 여기서 새로운 트랜잭션을 강제로 시작해야 함
-        transactionTemplate.execute(txStatus -> {
-            outboxRepository.findById(eventId).ifPresent(event -> {
-                event.changeStatus(status);
-            });
+        transactionTemplate.execute(tx -> {
+            outboxRepository.updateStatus(List.of(eventId), status);
             return null;
         });
     }
