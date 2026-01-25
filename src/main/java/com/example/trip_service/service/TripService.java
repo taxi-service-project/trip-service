@@ -7,17 +7,24 @@ import com.example.trip_service.dto.CancelTripRequest;
 import com.example.trip_service.dto.CompleteTripRequest;
 import com.example.trip_service.dto.TripDetailsResponse;
 import com.example.trip_service.entity.Trip;
+import com.example.trip_service.entity.TripOutbox;
+import com.example.trip_service.entity.TripStatus;
 import com.example.trip_service.exception.TripNotFoundException;
-import com.example.trip_service.kafka.TripKafkaProducer;
 import com.example.trip_service.kafka.dto.*;
+import com.example.trip_service.repository.TripOutboxRepository;
 import com.example.trip_service.repository.TripRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DeadlockLoserDataAccessException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
@@ -31,15 +38,16 @@ import java.time.LocalDateTime;
 @Slf4j
 public class TripService {
     private static final String DRIVER_TRIP_KEY_PREFIX = "driver:trip:";
+    private static final String KAFKA_TOPIC = "trip_events";
 
     private final TripRepository tripRepository;
     private final NaverMapsClient naverMapsClient;
-    private final TripKafkaProducer kafkaProducer;
     private final UserServiceClient userServiceClient;
     private final DriverServiceClient driverServiceClient;
     private final ReactiveRedisTemplate<String, String> reactiveRedisTemplate;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final TripOutboxRepository outboxRepository;
 
     public Mono<Trip> createTripFromEvent(TripMatchedEvent event) {
         log.info("배차 완료 이벤트 수신. Trip ID: {}", event.tripId());
@@ -117,8 +125,10 @@ public class TripService {
     public void driverArrived(String tripId) {
         Trip trip = getTripOrThrow(tripId);
         trip.arrive();
-        kafkaProducer.sendDriverArrivedEvent(new DriverArrivedEvent(trip.getTripId(), trip.getUserId()));
-        log.info("기사 도착 처리 완료: {}", tripId);
+        DriverArrivedEvent event = new DriverArrivedEvent(trip.getTripId(), trip.getUserId());
+        saveToOutbox(tripId, event);
+
+        log.info("기사 도착 처리 완료 (Outbox 저장됨): {}", tripId);
     }
 
     @Transactional
@@ -138,16 +148,11 @@ public class TripService {
                 trip.getTripId(), trip.getUserId(), trip.getDriverId(),
                 request.distanceMeters(), request.durationSeconds(), endedAt
         );
-        kafkaProducer.sendTripCompletedEvent(event);
+        saveToOutbox(tripId, event);
 
-        try {
-            redisTemplate.delete(DRIVER_TRIP_KEY_PREFIX + trip.getDriverId());
-        } catch (Exception e) {
-            log.error("운행 종료 후 Redis 키 삭제 실패. Driver ID: {}",
-                    trip.getDriverId(), e);
-        }
+        deleteRedisKeySafely(trip.getDriverId());
 
-        log.info("운행 종료 요청 처리 완료 (결제 대기 중): {}", tripId);
+        log.info("운행 종료 요청 처리 완료 (결제 대기 중, Outbox 저장됨): {}", tripId);
     }
 
     // PaymentService가 "결제 성공" 이벤트 보냄 -> Consumer가 호출
@@ -168,19 +173,14 @@ public class TripService {
         Trip trip = getTripOrThrow(tripId);
         trip.cancel();
 
-        // Kafka 이벤트 발행 (GeospatialService가 이걸 보고 기사 앱 주기를 10초로 변경함)
         TripCanceledEvent event = new TripCanceledEvent(
                 trip.getTripId(), trip.getDriverId(), request.canceledBy()
         );
-        kafkaProducer.sendTripCanceledEvent(event);
+        saveToOutbox(tripId, event);
 
-        try {
-            redisTemplate.delete(DRIVER_TRIP_KEY_PREFIX + trip.getDriverId());
-        } catch (Exception e) {
-            log.error("여정 취소 후 Redis 삭제 실패. Driver: {}", trip.getDriverId(), e);
-        }
+        deleteRedisKeySafely(trip.getDriverId());
 
-        log.info("여정 취소 처리 완료: {}", tripId);
+        log.info("여정 취소 처리 완료 (Outbox 저장됨): {}", tripId);
     }
 
     @Transactional(readOnly = true)
@@ -221,5 +221,32 @@ public class TripService {
     private Trip getTripOrThrow(String tripId) {
         return tripRepository.findByTripId(tripId)
                              .orElseThrow(() -> new TripNotFoundException("여정 정보 없음: " + tripId));
+    }
+
+    private void saveToOutbox(String tripId, Object event) {
+        TripOutbox outbox = TripOutbox.builder()
+                                      .aggregateId(tripId)
+                                      .topic(KAFKA_TOPIC)
+                                      .payload(toJson(event))
+                                      .build();
+
+        outboxRepository.save(outbox); // 같은 트랜잭션 내에서 저장됨
+    }
+
+    private String toJson(Object object) {
+        try {
+            return objectMapper.writeValueAsString(object);
+        } catch (JsonProcessingException e) {
+            log.error("JSON 변환 오류", e);
+            throw new RuntimeException("JSON 변환 실패", e);
+        }
+    }
+
+    private void deleteRedisKeySafely(String driverId) {
+        try {
+            redisTemplate.delete(DRIVER_TRIP_KEY_PREFIX + driverId);
+        } catch (Exception e) {
+            log.error("Redis 키 삭제 실패. Driver ID: {}", driverId, e);
+        }
     }
 }
