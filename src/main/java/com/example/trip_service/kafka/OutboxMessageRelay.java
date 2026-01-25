@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -72,6 +73,20 @@ public class OutboxMessageRelay {
     public void updateStatus(Long eventId, OutboxStatus status) {
         transactionTemplate.execute(tx -> {
             outboxRepository.updateStatus(List.of(eventId), status);
+            return null;
+        });
+    }
+
+    // 서버가 PUBLISHING 마킹 후 죽어버려서, 영원히 전송되지 못한 이벤트들을 구출
+    @Scheduled(fixedRate = 60000) // 1분마다 실행
+    public void rescueStuckEvents() {
+        LocalDateTime tenMinutesAgo = LocalDateTime.now().minusMinutes(10);
+
+        transactionTemplate.execute(status -> {
+            int count = outboxRepository.resetStuckEvents(OutboxStatus.PUBLISHING, OutboxStatus.READY, tenMinutesAgo);
+            if (count > 0) {
+                log.warn("🚨 멈춰있는(Stuck) 이벤트 {}건을 READY 상태로 복구했습니다.", count);
+            }
             return null;
         });
     }

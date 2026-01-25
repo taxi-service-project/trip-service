@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface TripOutboxRepository extends JpaRepository<TripOutbox, Long> {
@@ -23,5 +24,12 @@ public interface TripOutboxRepository extends JpaRepository<TripOutbox, Long> {
     @Modifying(clearAutomatically = true)
     @Query("UPDATE TripOutbox t SET t.status = :status WHERE t.id IN :ids")
     void updateStatus(@Param("ids") List<Long> ids, @Param("status") OutboxStatus status);
+
+    // 오랫동안 PUBLISHING 상태로 멈춘 건들 READY로 원복
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE TripOutbox t SET t.status = :newStatus WHERE t.status = :oldStatus AND t.createdAt < :cutoffTime")
+    int resetStuckEvents(@Param("oldStatus") OutboxStatus oldStatus,
+                         @Param("newStatus") OutboxStatus newStatus,
+                         @Param("cutoffTime") LocalDateTime cutoffTime);
 
 }
