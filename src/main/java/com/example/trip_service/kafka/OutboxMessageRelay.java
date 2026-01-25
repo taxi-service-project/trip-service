@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -24,6 +25,7 @@ public class OutboxMessageRelay {
 
     private final TripOutboxRepository outboxRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final TransactionTemplate transactionTemplate;
 
     @Qualifier("eventPublisherExecutor")
     private final Executor eventPublisherExecutor;
@@ -64,11 +66,13 @@ public class OutboxMessageRelay {
         }
     }
 
-    //  비동기로 완료해 publishEvents 트랜잭션은 이미 종료 되엇으므로, 새로운 트랜잭션을 열어야 함
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void updateStatus(Long eventId, OutboxStatus status) {
-        outboxRepository.findById(eventId).ifPresent(event -> {
-            event.changeStatus(status);
+        // 비동기 스레드이므로 여기서 새로운 트랜잭션을 강제로 시작해야 함
+        transactionTemplate.execute(txStatus -> {
+            outboxRepository.findById(eventId).ifPresent(event -> {
+                event.changeStatus(status);
+            });
+            return null;
         });
     }
 }
