@@ -28,14 +28,16 @@ public class OutboxMessageRelay {
     @Qualifier("eventPublisherExecutor")
     private final Executor eventPublisherExecutor;
 
-    // 이 메서드는 스케줄러 스레드 1개가 담당하지만, 실제 전송은 Executor가 함
     @Scheduled(fixedDelay = 500)
     @Transactional // 락 헤제를 위함
     public void publishEvents() {
-        // 1. 전송할 이벤트 가져오기 (SKIP LOCKED로 중복 방지)
         List<TripOutbox> events = outboxRepository.findEventsForPublishing(100);
 
         if (events.isEmpty()) return;
+
+        for (TripOutbox event : events) {
+            event.changeStatus(OutboxStatus.PUBLISHING);
+        }
 
         for (TripOutbox event : events) {
             CompletableFuture.runAsync(() -> sendToKafka(event), eventPublisherExecutor);
