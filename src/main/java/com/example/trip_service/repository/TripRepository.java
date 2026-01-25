@@ -1,15 +1,19 @@
 package com.example.trip_service.repository;
 
 import com.example.trip_service.entity.Trip;
-import com.example.trip_service.entity.TripStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
-import java.util.List;
 import java.util.Optional;
 
 public interface TripRepository extends JpaRepository<Trip, Long> {
     Optional<Trip> findByTripId(String tripId);
 
-    Optional<Trip> findFirstByDriverIdAndStatusIn(String driverId, List<TripStatus> statuses);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select t from Trip t where t.tripId = :tripId")
+    Optional<Trip> findByTripIdWithLock(@Param("tripId") String tripId);
 
 }

@@ -280,7 +280,7 @@ public class TripService {
     }
 
     private Trip getTripOrThrow(String tripId) {
-        return tripRepository.findByTripId(tripId)
+        return tripRepository.findByTripIdWithLock(tripId)
                              .orElseThrow(() -> new TripNotFoundException("여정 정보 없음: " + tripId));
     }
 

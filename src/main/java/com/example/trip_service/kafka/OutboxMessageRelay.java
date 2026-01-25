@@ -54,8 +54,8 @@ public class OutboxMessageRelay {
                     log.info("Kafka 발행 성공. Outbox ID: {}", event.getId());
                     updateStatus(event.getId(), OutboxStatus.DONE);
                 } else {
-                    // 실패 시: 로그 남김 -> 다음 Polling 때 다시 시도됨 (Retry 자동 효과)
                     log.error("Kafka 발행 실패. Outbox ID: {}, Error: {}", event.getId(), ex.getMessage());
+                    updateStatus(event.getId(), OutboxStatus.READY);
                 }
             });
 
@@ -64,7 +64,7 @@ public class OutboxMessageRelay {
         }
     }
 
-    //  콜백은 비동기 스레드에서 돌므로 새로운 트랜잭션을 열어야 함
+    //  비동기로 완료해 publishEvents 트랜잭션은 이미 종료 되엇으므로, 새로운 트랜잭션을 열어야 함
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void updateStatus(Long eventId, OutboxStatus status) {
         outboxRepository.findById(eventId).ifPresent(event -> {
