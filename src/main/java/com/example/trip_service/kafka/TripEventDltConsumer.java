@@ -1,6 +1,7 @@
 package com.example.trip_service.kafka;
 
 import com.example.trip_service.entity.FailedEvent;
+import com.example.trip_service.entity.FailedEventStatus;
 import com.example.trip_service.repository.FailedEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,7 @@ public class TripEventDltConsumer {
     public void consumeDlt(
             @Payload String message,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String originalDltTopic,
+            @Header(value = KafkaHeaders.RECEIVED_KEY, required = false) String key,
             @Header(value = "kafka_dlt_exception_message", required = false) String exceptionMessage
     ) {
         log.warn("[DLT 수신] 토픽: {}, 메시지: {}", originalDltTopic, message);
@@ -42,8 +44,10 @@ public class TripEventDltConsumer {
 
         FailedEvent failedEvent = FailedEvent.builder()
                                              .topic(originalDltTopic)
+                                             .kafkaKey(key)
                                              .payload(message)
                                              .errorMessage(truncate(exceptionMessage, 1000))
+                                             .status(FailedEventStatus.PENDING)
                                              .build();
 
         failedEventRepository.save(failedEvent);

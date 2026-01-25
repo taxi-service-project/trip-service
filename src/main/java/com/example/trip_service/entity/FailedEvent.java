@@ -16,19 +16,28 @@ public class FailedEvent {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
-    private String payload;
-
     @Column(nullable = false)
     private String topic;
 
-    @Column(nullable = true, length = 500)
+    @Column(name = "kafka_key", nullable = true)
+    private String kafkaKey;
+
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String payload;
+
+    @Column(nullable = true, length = 1000)
     private String errorMessage;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private FailedEventStatus status;
+
     @Builder
-    public FailedEvent(String payload, String topic, String errorMessage) {
-        this.payload = payload;
+    public FailedEvent(String topic, String kafkaKey, String payload, String errorMessage, FailedEventStatus status) {
         this.topic = topic;
+        this.kafkaKey = kafkaKey;
+        this.payload = payload;
         this.errorMessage = errorMessage;
+        this.status = status == null ? FailedEventStatus.PENDING : status;
     }
 }
