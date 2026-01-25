@@ -122,8 +122,24 @@ public class TripService {
     }
 
     @Transactional
+    @Retryable(
+            retryFor = {
+                    PessimisticLockingFailureException.class, // 락 타임아웃
+                    DeadlockLoserDataAccessException.class,   // 데드락
+                    TransientDataAccessException.class        // DB 네트워크/연결 일시적 장애
+            },
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 500)
+    )
     public void driverArrived(String tripId) {
         Trip trip = getTripOrThrow(tripId);
+
+        if (trip.getStatus() == TripStatus.ARRIVED) {
+            log.info("중복 요청(재시도) 감지됨. 성공 응답 반환. TripID: {}", tripId);
+            // 서버 처리는 성공했는데, 응답이 가는 도중에 네트워크가 끊길때 : 이미 Outbox에도 저장되었을 것이므로 아무것도 안 하고 리턴
+            return;
+        }
+
         trip.arrive();
         DriverArrivedEvent event = new DriverArrivedEvent(trip.getTripId(), trip.getUserId());
         saveToOutbox(tripId, event);
@@ -132,16 +148,46 @@ public class TripService {
     }
 
     @Transactional
+    @Retryable(
+            retryFor = {
+                    PessimisticLockingFailureException.class,
+                    DeadlockLoserDataAccessException.class,
+                    TransientDataAccessException.class
+            },
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 500)
+    )
     public void startTrip(String tripId) {
         Trip trip = getTripOrThrow(tripId);
+
+        if (trip.getStatus() == TripStatus.IN_PROGRESS) {
+            log.info("중복 요청(재시도) 감지됨. 성공 응답 반환. TripID: {}", tripId);
+            return;
+        }
+
         trip.start();
         log.info("운행 시작 처리 완료: {}", tripId);
     }
 
     // 기사님이 [운행 종료] 버튼 누름
     @Transactional
+    @Retryable(
+            retryFor = {
+                    PessimisticLockingFailureException.class,
+                    DeadlockLoserDataAccessException.class,
+                    TransientDataAccessException.class
+            },
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 500)
+    )
     public void completeTrip(String tripId, CompleteTripRequest request) {
         Trip trip = getTripOrThrow(tripId);
+
+        if (trip.getStatus() == TripStatus.COMPLETED) {
+            log.info("중복 요청(재시도) 감지됨. 성공 응답 반환. TripID: {}", tripId);
+            return;
+        }
+
         LocalDateTime endedAt = trip.complete();
 
         TripCompletedEvent event = new TripCompletedEvent(
@@ -169,8 +215,23 @@ public class TripService {
     }
 
     @Transactional
+    @Retryable(
+            retryFor = {
+                    PessimisticLockingFailureException.class,
+                    DeadlockLoserDataAccessException.class,
+                    TransientDataAccessException.class
+            },
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 500)
+    )
     public void cancelTrip(String tripId, CancelTripRequest request) {
         Trip trip = getTripOrThrow(tripId);
+
+        if (trip.getStatus() == TripStatus.CANCELED) {
+            log.info("중복 요청(재시도) 감지됨. 성공 응답 반환. TripID: {}", tripId);
+            return;
+        }
+
         trip.cancel();
 
         TripCanceledEvent event = new TripCanceledEvent(

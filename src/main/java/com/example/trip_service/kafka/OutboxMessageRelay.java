@@ -37,9 +37,7 @@ public class OutboxMessageRelay {
 
         if (events.isEmpty()) return;
 
-        // 2. 병렬 전송 시작
         for (TripOutbox event : events) {
-            // Executor 스레드 풀을 사용하여 비동기 실행
             CompletableFuture.runAsync(() -> sendToKafka(event), eventPublisherExecutor);
         }
     }
