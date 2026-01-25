@@ -90,4 +90,17 @@ public class OutboxMessageRelay {
             return null;
         });
     }
+
+    @Scheduled(cron = "0 0 3 * * *")
+    public void cleanupOldEvents() {
+        LocalDateTime retentionLimit = LocalDateTime.now().minusDays(3);
+
+        transactionTemplate.execute(status -> {
+            int deletedCount = outboxRepository.deleteOldEvents(OutboxStatus.DONE, retentionLimit);
+            if (deletedCount > 0) {
+                log.info("🧹 [Outbox Cleanup] 처리 완료된 지 3일 지난 이벤트 {}건을 삭제했습니다.", deletedCount);
+            }
+            return null;
+        });
+    }
 }

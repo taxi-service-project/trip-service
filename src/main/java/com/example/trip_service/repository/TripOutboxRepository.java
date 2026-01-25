@@ -32,4 +32,9 @@ public interface TripOutboxRepository extends JpaRepository<TripOutbox, Long> {
                          @Param("newStatus") OutboxStatus newStatus,
                          @Param("cutoffTime") LocalDateTime cutoffTime);
 
+    @Modifying(clearAutomatically = true)
+    @Query("DELETE FROM TripOutbox t WHERE t.status = :status AND t.createdAt < :cutoffTime")
+    int deleteOldEvents(@Param("status") OutboxStatus status,
+                        @Param("cutoffTime") LocalDateTime cutoffTime);
+
 }
