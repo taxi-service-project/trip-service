@@ -17,7 +17,7 @@ public interface FailedEventRepository extends JpaRepository<FailedEvent, Long> 
     Slice<FailedEvent> findAllByTopicAndStatus(String topic, FailedEventStatus status, Pageable pageable);
 
     @Modifying(clearAutomatically = true)
-    @Query("UPDATE FailedEvent f SET f.status = 'RESOLVED' WHERE f.id IN :ids")
-    void updateStatusToResolved(@Param("ids") List<Long> ids);
+    @Query("UPDATE FailedEvent f SET f.status = :status WHERE f.id IN :ids")
+    void updateStatus(@Param("ids") List<Long> ids, @Param("status") FailedEventStatus status);
 
 }

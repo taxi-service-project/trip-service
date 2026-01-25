@@ -17,4 +17,10 @@ public class FailedEventAdminController {
         int count = replayService.retryAllByTopic(topic);
         return ResponseEntity.ok(String.format("토픽 [%s]의 에러 메시지 %d건이 성공적으로 재발행되었습니다.", topic, count));
     }
+
+    @PostMapping("/{eventId}/ignore")
+    public ResponseEntity<String> ignoreEvent(@PathVariable Long eventId) {
+        replayService.ignoreEvent(eventId);
+        return ResponseEntity.ok("에러 메시지가 폐기(IGNORED) 처리되었습니다.");
+    }
 }

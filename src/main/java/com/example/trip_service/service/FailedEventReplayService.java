@@ -8,8 +8,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
@@ -33,7 +35,7 @@ public class FailedEventReplayService {
         log.info("🚀 [Bulk Retry] 토픽({}) 재발행 시작...", targetTopic);
 
         while (hasNext) {
-            Pageable pageable = PageRequest.of(0, CHUNK_SIZE);
+            Pageable pageable = PageRequest.of(0, CHUNK_SIZE, Sort.by(Sort.Direction.ASC, "id"));
             Slice<FailedEvent> slice = failedEventRepository.findAllByTopicAndStatus(
                     targetTopic,
                     FailedEventStatus.PENDING,
@@ -63,16 +65,35 @@ public class FailedEventReplayService {
 
             if (!successIds.isEmpty()) {
                 transactionTemplate.execute(status -> {
-                    failedEventRepository.updateStatusToResolved(successIds);
+                    failedEventRepository.updateStatus(successIds, FailedEventStatus.RESOLVED);
                     return null;
                 });
                 totalProcessed += successIds.size();
             }
+
+            if (successIds.isEmpty()) {
+                log.warn("⚠️ 이번 청크에서 재발행 성공한 건이 없습니다. 무한 루프 방지를 위해 중단합니다.");
+                break;
+            }
+
             hasNext = slice.hasNext();
         }
 
         log.info("✅ [Bulk Retry] 완료. 총 {}건 재발행됨.", totalProcessed);
         return totalProcessed;
+    }
+
+    @Transactional
+    public void ignoreEvent(Long eventId) {
+        FailedEvent event = failedEventRepository.findById(eventId)
+                                                 .orElseThrow(() -> new IllegalArgumentException("이벤트 없음: " + eventId));
+
+        if (event.getStatus() != FailedEventStatus.PENDING) {
+            throw new IllegalStateException("이미 처리된 이벤트입니다.");
+        }
+
+        failedEventRepository.updateStatus(List.of(eventId), FailedEventStatus.IGNORED);
+        log.info("🗑️ 에러 메시지(ID: {}) 폐기 완료.", eventId);
     }
 
 }
