@@ -48,21 +48,24 @@ public class OutboxMessageRelay {
 
     private void sendToKafka(TripOutbox event) {
         try {
-            CompletableFuture<SendResult<String, String>> future =
-                    kafkaTemplate.send(event.getTopic(), event.getAggregateId(), event.getPayload());
+            kafkaTemplate.send(event.getTopic(), event.getAggregateId(), event.getPayload()).get();
 
-            future.whenComplete((result, ex) -> {
-                if (ex == null) {
-                    log.info("Outbox Kafka 발행 성공. Outbox ID: {}", event.getId());
-                    updateStatus(event.getId(), OutboxStatus.DONE);
-                } else {
-                    log.error("Outbox Kafka 발행 실패. Outbox ID: {}, Error: {}", event.getId(), ex.getMessage());
-                    updateStatus(event.getId(), OutboxStatus.READY);
-                }
-            });
+            log.info("✅ [Outbox-Publish] 발행 성공 | ID: {} | Topic: {} | Key: {}",
+                    event.getId(),
+                    event.getTopic(),
+                    event.getAggregateId());
+
+            updateStatus(event.getId(), OutboxStatus.DONE);
 
         } catch (Exception e) {
-            log.error("Outbox Relay 내부 에러 발생", e);
+
+            log.error("❌ [Outbox-Publish] 발행 실패 | ID: {} | Topic: {} | Error: {}",
+                    event.getId(),
+                    event.getTopic(),
+                    e.getMessage(),
+                    e);
+
+            // 재시도를 위해 상태 원복
             updateStatus(event.getId(), OutboxStatus.READY);
         }
     }
