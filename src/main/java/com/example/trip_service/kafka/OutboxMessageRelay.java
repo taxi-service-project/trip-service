@@ -5,15 +5,14 @@ import com.example.trip_service.entity.TripOutbox;
 import com.example.trip_service.repository.TripOutboxRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
 @Component
 @RequiredArgsConstructor
@@ -79,6 +78,7 @@ public class OutboxMessageRelay {
 
     // 서버가 PUBLISHING 마킹 후 죽어버려서, 영원히 전송되지 못한 이벤트들을 구출
     @Scheduled(fixedRate = 60000) // 1분마다 실행
+    @SchedulerLock(name = "Outbox_rescueStuckEvents", lockAtLeastFor = "PT30S", lockAtMostFor = "PT50S")
     public void rescueStuckEvents() {
         LocalDateTime tenMinutesAgo = LocalDateTime.now().minusMinutes(10);
 
@@ -92,6 +92,7 @@ public class OutboxMessageRelay {
     }
 
     @Scheduled(cron = "0 0 3 * * *")
+    @SchedulerLock(name = "Outbox_cleanupOldEvents", lockAtLeastFor = "PT30S", lockAtMostFor = "PT50S")
     public void cleanupOldEvents() {
         LocalDateTime retentionLimit = LocalDateTime.now().minusDays(3);
 
