@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @Table(name = "trips")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Trip {
+public class Trip extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
