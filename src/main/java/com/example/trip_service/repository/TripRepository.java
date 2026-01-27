@@ -1,6 +1,7 @@
 package com.example.trip_service.repository;
 
 import com.example.trip_service.entity.Trip;
+import com.example.trip_service.entity.TripStatus;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -19,4 +20,6 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
     @Query("select t from Trip t where t.tripId = :tripId")
     Optional<Trip> findByTripIdWithLock(@Param("tripId") String tripId);
 
+    // 이 기사가 'IN_PROGRESS' 상태인 여정을 가지고 있는지 확인 (존재하면 true)
+    boolean existsByDriverIdAndStatus(String driverId, TripStatus status);
 }
