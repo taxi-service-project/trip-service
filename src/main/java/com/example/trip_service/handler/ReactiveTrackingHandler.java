@@ -46,6 +46,7 @@ public class ReactiveTrackingHandler implements WebSocketHandler {
 
         Flux<WebSocketMessage> redisFlux = reactiveRedisTemplate.listenTo(ChannelTopic.of(topic))
                                                                 .map(message -> session.textMessage(message.getMessage()))
+                                                                .onBackpressureDrop() // 최신 위치가 중요하므로 버퍼 꽉 차면 예전 메시지 버림
                                                                 .doOnError(e -> log.error("Redis 구독 에러", e));
 
         // 10초마다 "PING" 전송 (Heartbeat)
