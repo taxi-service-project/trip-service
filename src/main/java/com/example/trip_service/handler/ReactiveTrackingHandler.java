@@ -10,6 +10,7 @@ import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
 import java.net.URI;
 import java.time.Duration;
@@ -46,8 +47,19 @@ public class ReactiveTrackingHandler implements WebSocketHandler {
 
         Flux<WebSocketMessage> redisFlux = reactiveRedisTemplate.listenTo(ChannelTopic.of(topic))
                                                                 .map(message -> session.textMessage(message.getMessage()))
-                                                                .onBackpressureDrop() // 최신 위치가 중요하므로 버퍼 꽉 차면 예전 메시지 버림
-                                                                .doOnError(e -> log.error("Redis 구독 에러", e));
+                                                                .retryWhen(Retry.backoff(3, Duration.ofSeconds(2))
+                                                                                .doBeforeRetry(retrySignal ->
+                                                                                        log.warn("승객용 Redis 구독 재시도 중... (TripID: {}, 시도: {})",
+                                                                                                tripId, retrySignal.totalRetries() + 1)
+                                                                                )
+                                                                                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> {
+                                                                                    log.error("승객용 Redis 구독 최종 실패 (TripID: {})", tripId);
+                                                                                    return retrySignal.failure();
+                                                                                })
+                                                                )
+                                                                // 최신 위치가 중요하므로 버퍼 꽉 차면 예전 메시지 버림
+                                                                .onBackpressureDrop()
+                                                                .doOnError(e -> log.error("Redis 구독 치명적 에러: {}", e.getMessage()));
 
         // 10초마다 "PING" 전송 (Heartbeat)
         Flux<WebSocketMessage> pingFlux = Flux.interval(Duration.ofSeconds(10))
