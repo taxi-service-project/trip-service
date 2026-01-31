@@ -13,6 +13,8 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+  lifecycle:
+    timeout-per-shutdown-phase: 30s # 기존 작업이 끝날 때까지 최대 30초 기다려줌.
 
   data:
     redis:
