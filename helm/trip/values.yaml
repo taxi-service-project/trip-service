@@ -1,0 +1,75 @@
+ingress:
+  host: buildmystudy.com
+  pathType: Prefix
+
+spring:
+  labels: trip
+  image:
+    repository: 440744253928.dkr.ecr.ap-northeast-2.amazonaws.com/taxi/trip
+    tag: latest
+  service:
+    port: 8084
+    trip:
+      port: 8084
+  datasource:
+    url: ""
+    username: ""
+    password: ""
+
+  redis:
+    host: "redis-service"
+    port: 6379
+
+  kafka:
+    bootstrapServers: "kafka-cluster:9092"
+
+  naver:
+    clientId: ""
+    clientSecret: ""
+
+  external:
+    userUrl: "http://user-service"
+    driverUrl: "http://driver-service"
+
+  zipkin:
+    endpoint: "http://zipkin:9411/api/v2/spans"
+  eureka:
+    url: "http://discovery-service:8761/eureka"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage : 75
+
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+        - type: Pods
+          value: 1
+          periodSeconds: 60
