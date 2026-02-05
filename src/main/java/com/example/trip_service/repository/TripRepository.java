@@ -16,7 +16,7 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
     Optional<Trip> findByTripId(String tripId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @QueryHints({@QueryHint(name = "javax.persistence.lock.timeout", value = "3000")})
+    @QueryHints({@QueryHint(name = "jakarta.persistence.lock.timeout", value = "0")})
     @Query("select t from Trip t where t.tripId = :tripId")
     Optional<Trip> findByTripIdWithLock(@Param("tripId") String tripId);
 
