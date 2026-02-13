@@ -16,7 +16,7 @@ import java.util.Map;
 public class ReactiveKafkaConfig {
 
     @Bean
-    public ReceiverOptions<String, Object> tripMatchedReceiverOptions(KafkaProperties kafkaProperties) {
+    public ReceiverOptions<String, String> tripMatchedReceiverOptions(KafkaProperties kafkaProperties) {
         // 1. application.yml의 모든 설정(Deserializer 등)을 가져옵니다.
         Map<String, Object> props = new HashMap<>(kafkaProperties.buildConsumerProperties());
 
@@ -28,12 +28,32 @@ public class ReactiveKafkaConfig {
         // 3. 리액티브용 별도 컨슈머 그룹 ID 설정 (기존 그룹과 겹치지 않게)
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "trip-service-reactive-group");
 
-        return ReceiverOptions.<String, Object>create(props)
+        return ReceiverOptions.<String, String>create(props)
                               .subscription(Collections.singleton("matching_events"));
     }
 
     @Bean
-    public KafkaReceiver<String, Object> tripMatchedKafkaReceiver(ReceiverOptions<String, Object> options) {
-        return KafkaReceiver.create(options);
+    public KafkaReceiver<String, String> tripMatchedKafkaReceiver(ReceiverOptions<String, String> tripMatchedReceiverOptions) {
+        return KafkaReceiver.create(tripMatchedReceiverOptions);
+    }
+
+    @Bean
+    public ReceiverOptions<String, String> locationReceiverOptions(KafkaProperties kafkaProperties) {
+        Map<String, Object> props = new HashMap<>(kafkaProperties.buildConsumerProperties());
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "trip-service-location-reactive-group");
+
+        // 한 번에 가져오는 양을 늘리는 튜닝
+        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 500);
+
+        return ReceiverOptions.<String, String>create(props)
+                              .subscription(Collections.singleton("driver_location_events"));
+    }
+
+    @Bean
+    public KafkaReceiver<String, String> locationKafkaReceiver(ReceiverOptions<String, String> locationReceiverOptions) {
+        return KafkaReceiver.create(locationReceiverOptions);
     }
 }

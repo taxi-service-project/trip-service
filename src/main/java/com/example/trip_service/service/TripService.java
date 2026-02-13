@@ -276,7 +276,6 @@ public class TripService {
         // 2. MultiGet으로 모든 Trip ID를 한 번에 조회 (네트워크 1회)
         return reactiveRedisTemplate.opsForValue().multiGet(keys)
                                     .flatMapMany(tripIds -> {
-                                        // events와 조회된 tripIds를 인덱스로 매칭하여 처리
                                         return Flux.range(0, events.size())
                                                    .flatMap(i -> {
                                                        DriverLocationUpdatedEvent event = events.get(i);
@@ -294,7 +293,7 @@ public class TripService {
                                                        } catch (JsonProcessingException e) {
                                                            return Mono.error(e);
                                                        }
-                                                   });
+                                                   }, 50);
                                     })
                                     .then() // 모든 전송이 완료될 때까지 대기
                                     .doOnSuccess(v -> log.debug("📍 위치 정보 {}개 방송 완료", events.size()))
