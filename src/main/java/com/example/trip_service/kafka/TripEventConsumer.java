@@ -11,16 +11,10 @@ import org.springframework.stereotype.Component;
 @Component
 @Slf4j
 @RequiredArgsConstructor
-@KafkaListener(topics = {"matching_events", "payment_events", "driver_location_events"}, groupId = "trip-service-group")
+@KafkaListener(topics = {"payment_events", "driver_location_events"}, groupId = "trip-service-group")
 public class TripEventConsumer {
 
     private final TripService tripService;
-
-    @KafkaHandler
-    public void handleTripMatchedEvent(TripMatchedEvent event) {
-        log.info("Consumer: 배차 이벤트 수신 - TripID: {}", event.tripId());
-        tripService.createTripFromEvent(event).block();
-    }
 
     @KafkaHandler
     public void handlePaymentCompletedEvent(PaymentCompletedEvent event) {

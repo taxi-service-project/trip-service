@@ -24,13 +24,15 @@ spring:
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
+      acks: all
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
         enable.idempotence: true
         delivery.timeout.ms: 120000
-        linger.ms: 50
-        batch.size: 131072
+        linger.ms: 10
+        batch.size: 130000
+        compression-type: zstd # 압축
         request.timeout.ms: 30000
     consumer:
       group-id: trip-service-group
@@ -38,6 +40,7 @@ spring:
       key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
+        max.poll.interval.ms: 600000
         spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
         spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
         spring.json.use.type.headers: true
@@ -48,7 +51,6 @@ spring:
           com.example.payment_service.kafka.dto.PaymentCompletedEvent:com.example.trip_service.kafka.dto.PaymentCompletedEvent,
           com.example.payment_service.kafka.dto.PaymentFailedEvent:com.example.trip_service.kafka.dto.PaymentFailedEvent,
           com.example.geospatial_service.kafka.dto.DriverLocationUpdatedEvent:com.example.trip_service.kafka.dto.DriverLocationUpdatedEvent
-
     template:
       observation-enabled: true
 
