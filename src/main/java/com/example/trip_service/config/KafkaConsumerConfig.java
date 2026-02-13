@@ -75,6 +75,22 @@ public class KafkaConsumerConfig {
         return factory;
     }
 
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, Object> batchKafkaListenerContainerFactory(
+            ConsumerFactory<String, Object> consumerFactory,
+            DefaultErrorHandler errorHandler) {
+
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory);
+        factory.setCommonErrorHandler(errorHandler);
+        factory.setBatchListener(true);
+        factory.setConcurrency(3);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.BATCH);
+        factory.getContainerProperties().setObservationEnabled(true);
+
+        return factory;
+    }
+
     // =========================================================
     // 2. [DLT용] 에러 발생 시 -> 로그만 찍고 끝냄
     // =========================================================

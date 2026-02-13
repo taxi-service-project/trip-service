@@ -29,11 +29,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -263,22 +265,43 @@ public class TripService {
         );
     }
 
-    public void forwardDriverLocationToPassenger(DriverLocationUpdatedEvent event) {
-        String key = DRIVER_TRIP_KEY_PREFIX + event.driverId();
+    public Mono<Void> forwardDriverLocationToPassengerBulk(List<DriverLocationUpdatedEvent> events) {
+        if (events == null || events.isEmpty()) return Mono.empty();
 
-        reactiveRedisTemplate.opsForValue().get(key)
-                             .flatMap(tripId -> {
-                                 // 방송할 채널 이름 결정 (예: trip:location:12345)
-                                 String topic = "trip:location:" + tripId;
-                                 try {
-                                     String messageJson = objectMapper.writeValueAsString(event);
-                                     return reactiveRedisTemplate.convertAndSend(topic, messageJson);
-                                 } catch (JsonProcessingException e) {
-                                     return Mono.error(e);
-                                 }
-                             })
-                             .doOnSuccess(count -> log.debug("위치 방송 완료. 수신자: {}", count))
-                             .subscribe();
+        // 1. 모든 Driver ID에 해당하는 Redis Key 리스트 생성
+        List<String> keys = events.stream()
+                                  .map(event -> DRIVER_TRIP_KEY_PREFIX + event.driverId())
+                                  .toList();
+
+        // 2. MultiGet으로 모든 Trip ID를 한 번에 조회 (네트워크 1회)
+        return reactiveRedisTemplate.opsForValue().multiGet(keys)
+                                    .flatMapMany(tripIds -> {
+                                        // events와 조회된 tripIds를 인덱스로 매칭하여 처리
+                                        return Flux.range(0, events.size())
+                                                   .flatMap(i -> {
+                                                       DriverLocationUpdatedEvent event = events.get(i);
+                                                       String tripId = (String) tripIds.get(i);
+
+                                                       // 매칭되는 TripId가 없으면 방송 스킵
+                                                       if (tripId == null) return Mono.empty();
+
+                                                       // 방송할 채널 이름 결정 (예: trip:location:12345)
+                                                       String topic = "trip:location:" + tripId;
+                                                       try {
+                                                           String messageJson = objectMapper.writeValueAsString(event);
+                                                           // Redis Pub/Sub 방송 (비동기 병렬 실행)
+                                                           return reactiveRedisTemplate.convertAndSend(topic, messageJson);
+                                                       } catch (JsonProcessingException e) {
+                                                           return Mono.error(e);
+                                                       }
+                                                   });
+                                    })
+                                    .then() // 모든 전송이 완료될 때까지 대기
+                                    .doOnSuccess(v -> log.debug("📍 위치 정보 {}개 방송 완료", events.size()))
+                                    .onErrorResume(e -> {
+                                        log.error("❌ 위치 방송 중 오류 발생", e);
+                                        return Mono.empty(); // 에러가 나도 다음 배치를 위해 삼킴
+                                    });
     }
 
     public boolean isDriverOnTrip(String driverId) {

@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 @Component
 @Slf4j
 @RequiredArgsConstructor
-@KafkaListener(topics = {"payment_events", "driver_location_events"}, groupId = "trip-service-group")
+@KafkaListener(topics = "payment_events", groupId = "trip-service-payment-group")
 public class TripEventConsumer {
 
     private final TripService tripService;
@@ -26,11 +26,6 @@ public class TripEventConsumer {
     public void handlePaymentFailedEvent(PaymentFailedEvent event) {
         log.info("Consumer: 결제 실패 이벤트 수신 - TripID: {}", event.tripId());
         tripService.revertTripCompletion(event);
-    }
-
-    @KafkaHandler
-    public void handleDriverLocationUpdatedEvent(DriverLocationUpdatedEvent event) {
-        tripService.forwardDriverLocationToPassenger(event);
     }
 
     @KafkaHandler(isDefault = true)
