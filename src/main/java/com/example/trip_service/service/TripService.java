@@ -27,6 +27,8 @@ import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -196,7 +198,7 @@ public class TripService {
         );
         saveToOutbox(tripId, event);
 
-        deleteRedisKeySafely(trip.getDriverId());
+        scheduleRedisKeyDeletion(trip.getDriverId());
 
         log.info("운행 종료 요청 처리 완료 (결제 대기 중, Outbox 저장됨): {}", tripId);
     }
@@ -239,7 +241,7 @@ public class TripService {
         );
         saveToOutbox(tripId, event);
 
-        deleteRedisKeySafely(trip.getDriverId());
+        scheduleRedisKeyDeletion(trip.getDriverId());
 
         log.info("여정 취소 처리 완료 (Outbox 저장됨): {}", tripId);
     }
@@ -312,6 +314,20 @@ public class TripService {
             redisTemplate.delete(DRIVER_TRIP_KEY_PREFIX + driverId);
         } catch (Exception e) {
             log.error("Redis 키 삭제 실패. Driver ID: {}", driverId, e);
+        }
+    }
+
+    private void scheduleRedisKeyDeletion(String driverId) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    deleteRedisKeySafely(driverId);
+                    log.info("트랜잭션 커밋 후 Redis 키 삭제 실행");
+                }
+            });
+        } else {
+            deleteRedisKeySafely(driverId);
         }
     }
 }
