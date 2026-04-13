@@ -23,7 +23,7 @@ import java.time.Duration;
 @Slf4j
 public class TripMatchedReactiveConsumer implements CommandLineRunner, DisposableBean {
 
-    private final KafkaReceiver<String, String> kafkaReceiver;
+    private final KafkaReceiver<String, String> tripMatchedKafkaReceiver;
     private final TripService tripService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
@@ -33,7 +33,7 @@ public class TripMatchedReactiveConsumer implements CommandLineRunner, Disposabl
     public void run(String... args) {
         log.info("🚀 [Reactive Kafka] 배차 이벤트 리스너 시작 (Concurrency: 256, Manual Parsing)");
 
-        this.subscription = kafkaReceiver.receive()
+        this.subscription = tripMatchedKafkaReceiver.receive()
                                          // 1. 병렬 처리 진입 (최대 256개 동시 실행)
                                          .flatMap(record -> {
                                              return processRecord(record)
