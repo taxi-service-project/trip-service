@@ -48,12 +48,17 @@ public class DriverLocationReactiveConsumer implements CommandLineRunner, Dispos
                                                                                                     .toList();
 
                                                      return tripService.forwardDriverLocationToPassengerBulk(events)
-                                                                       .doOnSuccess(v -> {
-                                                                           // 4. 배치 내 모든 레코드의 Offset을 한꺼번에 Acknowledge
-                                                                           batch.get(batch.size() - 1).record().receiverOffset().acknowledge();
-                                                                       })
+                                                                       .doOnSuccess(v -> log.debug("위치 배치 방송 성공"))
+
+                                                                       // 에러 시 로그 찍고 스트림 유지
                                                                        .doOnError(e -> log.error("❌ [Location Batch Error] 방송 실패: {}", e.getMessage()))
-                                                                       .onErrorResume(e -> Mono.empty()); // 한 배치가 실패해도 다음 배치를 위해 스트림 유지
+                                                                       .onErrorResume(e -> Mono.empty())
+
+                                                                       // 성공(onComplete)이든 에러 처리 후(onErrorResume)든
+                                                                       // 이 배치의 처리가 끝났다면 무조건 오프셋을 Ack하여 구멍이 생기는 것을 막음
+                                                                       .doFinally(signalType -> {
+                                                                           batch.get(batch.size() - 1).record().receiverOffset().acknowledge();
+                                                                       });
                                                  }, 10)
                                                  .subscribe(
                                                          null,
