@@ -6,12 +6,14 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 import org.springframework.messaging.converter.MessageConversionException;
 import org.springframework.util.backoff.FixedBackOff;
 import org.springframework.web.client.ResourceAccessException;
@@ -34,7 +36,10 @@ public class KafkaConsumerConfig {
                         )
         );
 
-        FixedBackOff backOff = new FixedBackOff(1000L, 3);
+        ExponentialBackOffWithMaxRetries backOff = new ExponentialBackOffWithMaxRetries(3);
+        backOff.setInitialInterval(1000L);
+        backOff.setMultiplier(2.0);
+        backOff.setMaxInterval(10000L);
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
 
@@ -55,7 +60,8 @@ public class KafkaConsumerConfig {
         // 재시도하지 않을 오류: 데이터/코드 문제
         errorHandler.addNotRetryableExceptions(
                 MessageConversionException.class, // JSON 파싱 실패
-                NullPointerException.class
+                NullPointerException.class,
+                DataIntegrityViolationException.class // 중복 키, Not Null 위반 등은 즉시 DLT로 직행
         );
         return errorHandler;
     }
@@ -70,22 +76,6 @@ public class KafkaConsumerConfig {
         factory.setCommonErrorHandler(errorHandler);
         factory.setConcurrency(3);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
-        factory.getContainerProperties().setObservationEnabled(true);
-
-        return factory;
-    }
-
-    @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, Object> batchKafkaListenerContainerFactory(
-            ConsumerFactory<String, Object> consumerFactory,
-            DefaultErrorHandler errorHandler) {
-
-        ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
-        factory.setConsumerFactory(consumerFactory);
-        factory.setCommonErrorHandler(errorHandler);
-        factory.setBatchListener(true);
-        factory.setConcurrency(3);
-        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.BATCH);
         factory.getContainerProperties().setObservationEnabled(true);
 
         return factory;
